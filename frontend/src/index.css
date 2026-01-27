@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: #0a0a0a;
+  color: #f1f1f1;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cinzel', serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #8b0000;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff6b35;
+}
+
+/* Button base styles */
+.btn {
+  @apply px-6 py-3 rounded-lg font-semibold transition-all duration-300 cursor-pointer;
+}
+
+.btn-primary {
+  @apply bg-chakra-red hover:bg-chakra-orange text-white shadow-red-glow;
+}
+
+.btn-secondary {
+  @apply bg-chakra-gray hover:bg-chakra-border text-white border border-chakra-border;
+}
+
+.btn-gold {
+  @apply bg-chakra-gold hover:bg-yellow-500 text-black shadow-gold-glow;
+}
+
+/* Card styles */
+.card {
+  @apply bg-chakra-gray border border-chakra-border rounded-lg p-6 shadow-lg;
+}
+
+/* Input styles */
+.input {
+  @apply w-full px-4 py-3 bg-chakra-dark border border-chakra-border rounded-lg text-white focus:outline-none focus:border-chakra-red transition-colors;
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.float-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Glow text */
+.text-glow {
+  text-shadow: 0 0 10px rgba(139, 0, 0, 0.8);
+}
+
+.text-gold-glow {
+  text-shadow: 0 0 10px rgba(212, 175, 55, 0.6);
+}
