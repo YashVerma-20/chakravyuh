@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 
+// ✅ ADD THIS LINE (DB INIT)
+const initDb = require('./scripts/init-db');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -47,6 +50,10 @@ app.options('*', cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 🚀 INITIALIZE DATABASE (POSTGRES)
+// ⚠️ Runs safely with IF NOT EXISTS
+initDb();
 
 // Request logging
 app.use((req, res, next) => {
