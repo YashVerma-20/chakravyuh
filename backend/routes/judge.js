@@ -52,7 +52,7 @@ router.get('/config', async (req, res) => {
 });
 
 /* =========================
-   START ROUND (SAFE + RESET)
+   START ROUND (SAFE + FULL RESET)
    ========================= */
 router.post('/round/start', async (req, res) => {
     try {
@@ -71,26 +71,35 @@ router.post('/round/start', async (req, res) => {
         const teamsResult = await db.query('SELECT id FROM teams');
 
         for (const team of teamsResult.rows) {
-            // Reset team state
+            // Reset team state (FULL RESET)
             await db.query(`
-                INSERT INTO team_state (team_id, total_score, started_at, is_completed, wrong_answer_count, current_question_position)
-                VALUES ($1, 0, CURRENT_TIMESTAMP, false, 0, 1)
+                INSERT INTO team_state (
+                    team_id,
+                    total_score,
+                    started_at,
+                    is_completed,
+                    wrong_answer_count,
+                    current_question_position,
+                    question_set_number
+                )
+                VALUES ($1, 0, CURRENT_TIMESTAMP, false, 0, 1, 1)
                 ON CONFLICT (team_id)
                 DO UPDATE SET
                     total_score = 0,
                     started_at = CURRENT_TIMESTAMP,
                     is_completed = false,
                     wrong_answer_count = 0,
-                    current_question_position = 1
+                    current_question_position = 1,
+                    question_set_number = 1
             `, [team.id]);
 
-            // 🔴 CRITICAL FIX: clear old questions
+            // 🔴 CRITICAL: clear old question assignments
             await db.query(
                 'DELETE FROM team_questions WHERE team_id = $1',
                 [team.id]
             );
 
-            // Assign new questions
+            // Assign fresh questions
             const randomSet = Math.floor(Math.random() * 7) + 1;
 
             const questionsResult = await db.query(`
@@ -109,7 +118,7 @@ router.post('/round/start', async (req, res) => {
             }
         }
 
-        // Activate round
+        // Activate round (single source of truth)
         await db.query(`
             UPDATE round_config
             SET round_state = 'ACTIVE',
@@ -169,7 +178,7 @@ router.post('/round/reset', async (req, res) => {
         await db.query('DELETE FROM question_time_tracking');
         await db.query('DELETE FROM leaderboard');
         await db.query('DELETE FROM team_state');
-        await db.query('DELETE FROM team_questions'); // 🔴 CRITICAL FIX
+        await db.query('DELETE FROM team_questions');
 
         await db.query(`
             UPDATE round_config
@@ -225,38 +234,6 @@ router.get('/dashboard/stats', async (req, res) => {
         });
     } catch (error) {
         console.error('Get dashboard stats error:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
-    }
-});
-
-/* =========================
-   FRONTEND COMPATIBILITY
-   ========================= */
-router.get('/stats', async (req, res) => {
-    try {
-        const configResult = await db.query(`
-            SELECT *
-            FROM round_config
-            ORDER BY id ASC
-            LIMIT 1
-        `);
-
-        const teamsResult = await db.query('SELECT COUNT(*) FROM teams');
-        const completedResult = await db.query(
-            'SELECT COUNT(*) FROM team_state WHERE is_completed = true'
-        );
-        const submissionsResult = await db.query(
-            'SELECT COUNT(*) FROM submissions'
-        );
-
-        res.json({
-            roundState: configResult.rows[0]?.round_state || 'LOCKED',
-            totalTeams: parseInt(teamsResult.rows[0].count),
-            completedTeams: parseInt(completedResult.rows[0].count),
-            totalSubmissions: parseInt(submissionsResult.rows[0].count)
-        });
-    } catch (error) {
-        console.error('Get stats error:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
