@@ -17,7 +17,7 @@ const JudgeLogin = () => {
         setLoading(true);
 
         try {
-            const response = await api.post('/auth/judge/login', { username, password });
+            const response = await api.post('/api/auth/judge/login', { username, password });
             login(response.data.token, response.data.user);
             navigate('/judge/dashboard');
         } catch (err) {
