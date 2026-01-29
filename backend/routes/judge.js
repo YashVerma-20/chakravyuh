@@ -209,33 +209,46 @@ router.post('/round/reset', async (req, res) => {
 /* =========================
    DASHBOARD STATS
    ========================= */
-router.get('/dashboard/stats', async (req, res) => {
+// =========================
+// PARTICIPANT STATUS (🔥 REQUIRED)
+// =========================
+router.get('/status', async (req, res) => {
     try {
+        const teamId = req.user.userId;
+
         const configResult = await db.query(`
-            SELECT *
+            SELECT round_state
             FROM round_config
             ORDER BY id ASC
             LIMIT 1
         `);
 
-        const teamsResult = await db.query('SELECT COUNT(*) FROM teams');
-        const completedResult = await db.query(
-            'SELECT COUNT(*) FROM team_state WHERE is_completed = true'
-        );
-        const submissionsResult = await db.query(
-            'SELECT COUNT(*) FROM submissions'
+        const roundState = configResult.rows[0]?.round_state || 'LOCKED';
+
+        const stateResult = await db.query(
+            'SELECT * FROM team_state WHERE team_id = $1',
+            [teamId]
         );
 
+        const teamState = stateResult.rows[0];
+
         res.json({
-            roundState: configResult.rows[0]?.round_state || 'LOCKED',
-            totalTeams: parseInt(teamsResult.rows[0].count),
-            completedTeams: parseInt(completedResult.rows[0].count),
-            totalSubmissions: parseInt(submissionsResult.rows[0].count)
+            // 🔥 FRONTEND EXPECTS THIS
+            status: roundState,
+
+            // Extra info
+            roundState,
+            currentQuestion: teamState?.current_question_position || 1,
+            totalQuestions: 7,
+            isCompleted: teamState?.is_completed || false,
+            wrongAnswerCount: teamState?.wrong_answer_count || 0,
+            canProceed: true
         });
     } catch (error) {
-        console.error('Get dashboard stats error:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
+        console.error('Participant status error:', error);
+        res.status(500).json({ error: 'Failed to fetch status' });
     }
 });
+
 
 module.exports = router;
