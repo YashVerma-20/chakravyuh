@@ -52,21 +52,26 @@ router.get('/config', async (req, res) => {
    ========================= */
 router.post('/round/start', async (req, res) => {
     try {
-        // Ensure round_config exists
-        await db.query(`
-            INSERT INTO round_config (id, round_state, is_locked)
-            VALUES (1, 'LOCKED', 0)
-            ON CONFLICT (id) DO NOTHING
-        `);
+        // 1️⃣ Ensure exactly ONE round_config row exists
+        const configCheck = await db.query(
+            'SELECT id FROM round_config LIMIT 1'
+        );
 
+        if (configCheck.rows.length === 0) {
+            await db.query(`
+                INSERT INTO round_config (round_state, is_locked)
+                VALUES ('LOCKED', 0)
+            `);
+        }
+
+        // 2️⃣ Initialize / reset team_state
         const teamsResult = await db.query('SELECT id FROM teams');
         const teams = teamsResult.rows;
 
         for (const team of teams) {
-            // Init or reset team_state
             await db.query(`
-                INSERT INTO team_state (team_id, total_score, started_at)
-                VALUES ($1, 0, CURRENT_TIMESTAMP)
+                INSERT INTO team_state (team_id, total_score, started_at, is_completed)
+                VALUES ($1, 0, CURRENT_TIMESTAMP, false)
                 ON CONFLICT (team_id)
                 DO UPDATE SET
                     total_score = 0,
@@ -74,7 +79,7 @@ router.post('/round/start', async (req, res) => {
                     is_completed = false
             `, [team.id]);
 
-            // Assign questions only once
+            // Assign questions ONCE
             const assignedCheck = await db.query(
                 'SELECT COUNT(*) FROM team_questions WHERE team_id = $1',
                 [team.id]
@@ -98,19 +103,17 @@ router.post('/round/start', async (req, res) => {
             }
         }
 
-        // Activate round
-        const updateResult = await db.query(`
+        // 3️⃣ Activate round (SAFE UPDATE)
+        await db.query(`
             UPDATE round_config
             SET round_state = 'ACTIVE',
-                is_locked = 1,
+                is_locked = true,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = 1
-            RETURNING round_state
         `);
 
         res.json({
             success: true,
-            state: updateResult.rows[0].round_state,
+            message: 'Round started successfully',
             teamsInitialized: teams.length
         });
     } catch (error) {
@@ -118,6 +121,7 @@ router.post('/round/start', async (req, res) => {
         res.status(500).json({ error: 'Failed to start round' });
     }
 });
+
 
 /* =========================
    ROUND COMPLETE
