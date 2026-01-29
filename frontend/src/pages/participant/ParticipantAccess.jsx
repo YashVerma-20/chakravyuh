@@ -8,6 +8,7 @@ const ParticipantAccess = () => {
     const [accessToken, setAccessToken] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -17,11 +18,27 @@ const ParticipantAccess = () => {
         setLoading(true);
 
         try {
-            const response = await api.post('/auth/participant/access', { accessToken });
-            login(response.data.token, response.data.team);
+            /**
+             * axios baseURL already includes `/api`
+             * so DO NOT prefix `/api` here
+             */
+            const response = await api.post('/auth/participant/access', {
+                accessToken: accessToken.trim()
+            });
+
+            // Store token + participant info
+            login(response.data.token, {
+                ...response.data.team,
+                role: 'participant'
+            });
+
             navigate('/participant/question');
         } catch (err) {
-            setError(err.response?.data?.error || 'Invalid access token');
+            console.error('Participant access error:', err);
+            setError(
+                err.response?.data?.error ||
+                'Invalid or expired access token'
+            );
         } finally {
             setLoading(false);
         }
@@ -39,7 +56,9 @@ const ParticipantAccess = () => {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-gray-300 mb-2">Access Token</label>
+                            <label className="block text-gray-300 mb-2">
+                                Access Token
+                            </label>
                             <input
                                 type="text"
                                 value={accessToken}
