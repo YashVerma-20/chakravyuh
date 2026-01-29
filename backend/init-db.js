@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { query } = require('../config/database');
+const { query } = require('./config/database');
 
 const initDb = async () => {
   try {
