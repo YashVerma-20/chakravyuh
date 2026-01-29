@@ -27,6 +27,27 @@ router.get('/submissions', async (req, res) => {
 });
 
 /* =========================
+   GET ROUND CONFIG (MISSING FIX)
+   ========================= */
+router.get('/config', async (req, res) => {
+    try {
+        const result = await db.query(
+            'SELECT * FROM round_config LIMIT 1'
+        );
+
+        res.json({
+            config: result.rows[0] || {
+                round_state: 'LOCKED',
+                is_locked: 0
+            }
+        });
+    } catch (error) {
+        console.error('Get config error:', error);
+        res.status(500).json({ error: 'Failed to fetch config' });
+    }
+});
+
+/* =========================
    START ROUND (FIXED)
    ========================= */
 router.post('/round/start', async (req, res) => {
