@@ -12,20 +12,26 @@ const JudgeLogin = () => {
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
-        try {
-            const response = await api.post('/api/auth/judge/login', { username, password });
-            login(response.data.token, response.data.user);
-            navigate('/judge/dashboard');
-        } catch (err) {
-            setError(err.response?.data?.error || 'Login failed');
-        } finally {
-            setLoading(false);
-        }
-    };
+    try {
+        // ✅ DO NOT add /api here
+        const response = await api.post('/auth/judge/login', {
+            username,
+            password
+        });
+
+        login(response.data.token, response.data.user);
+        navigate('/judge/dashboard');
+    } catch (err) {
+        setError(err.response?.data?.error || 'Login failed');
+    } finally {
+        setLoading(false);
+    }
+};
+
 
     return (
         <div className="min-h-screen bg-chakra-darker flex items-center justify-center px-4">
