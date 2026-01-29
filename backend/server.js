@@ -4,7 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 // ✅ ADD THIS LINE (DB INIT)
-const initDb = require('./scripts/init-db.js');
+const initDb = require('./init-db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
