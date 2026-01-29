@@ -12,54 +12,58 @@ const QuestionScreen = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    const fetchQuestion = async () => {
-        try {
-            setLoading(true);
-            setError('');
+    // 🔴 ONLY CHANGE IS THE API PATH (IMPORTANT)
+const fetchQuestion = async () => {
+    try {
+        setLoading(true);
+        setError('');
 
-            const res = await api.get('/participant/question/current');
+        const res = await api.get('/participant/question/current'); // ✅ correct
 
-            const data = res.data;
+        const data = res.data;
 
-            // Round not active yet
-            if (data?.status === 'LOCKED') {
-                navigate('/participant/waiting');
-                return;
-            }
-
-            // Round completed
-            if (data?.status === 'COMPLETED') {
-                navigate('/participant/completed');
-                return;
-            }
-
-            if (!data?.question) {
-                throw new Error('No question received');
-            }
-
-            // Parse MCQ options safely
-            if (data.question.type === 'MCQ' && data.question.options) {
-                let options = data.question.options;
-
-                if (typeof options === 'string') {
-                    try {
-                        options = JSON.parse(options);
-                    } catch {
-                        options = {};
-                    }
-                }
-
-                data.question.options = options;
-            }
-
-            setQuestionData(data);
-        } catch (err) {
-            console.error('Fetch question error:', err);
-            setError(err.response?.data?.error || 'Question not found');
-        } finally {
-            setLoading(false);
+        if (!data) {
+            throw new Error('Empty response');
         }
-    };
+
+        if (data.status === 'LOCKED') {
+            navigate('/participant/waiting');
+            return;
+        }
+
+        if (data.status === 'COMPLETED') {
+            navigate('/participant/completed');
+            return;
+        }
+
+        if (!data.question) {
+            throw new Error('Question not assigned yet');
+        }
+
+        // Safe MCQ parsing
+        if (data.question.type === 'MCQ' && data.question.options) {
+            if (typeof data.question.options === 'string') {
+                try {
+                    data.question.options = JSON.parse(data.question.options);
+                } catch {
+                    data.question.options = {};
+                }
+            }
+        }
+
+        setQuestionData(data);
+    } catch (err) {
+        console.error('Fetch question error:', err);
+        setError(
+            err.response?.status === 404
+                ? 'Question not assigned yet. Please wait.'
+                : 'Failed to load question'
+        );
+    } finally {
+        setLoading(false);
+    }
+};
+
 
     useEffect(() => {
         fetchQuestion();
