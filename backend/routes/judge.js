@@ -145,25 +145,44 @@ router.post('/round/complete', async (req, res) => {
    ROUND RESET
    ========================= */
 router.post('/round/reset', async (req, res) => {
-    try {
-        await db.query('DELETE FROM team_state');
-        await db.query('DELETE FROM submissions');
-        await db.query('DELETE FROM question_time_tracking');
-        await db.query('DELETE FROM leaderboard');
+    const client = await db.connect();
 
-        await db.query(`
+    try {
+        await client.query('BEGIN');
+
+        // Order matters because of FK constraints
+        await client.query('DELETE FROM submissions');
+        await client.query('DELETE FROM question_time_tracking');
+        await client.query('DELETE FROM leaderboard');
+        await client.query('DELETE FROM team_state');
+
+        await client.query(`
             UPDATE round_config
-            SET round_state = 'LOCKED',
-                is_locked = 0,
+            SET
+                round_state = 'LOCKED',
+                is_locked = false,
                 updated_at = CURRENT_TIMESTAMP
         `);
 
-        res.json({ success: true, message: 'Round reset successfully' });
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Round reset successfully'
+        });
     } catch (error) {
-        console.error('Reset round error:', error);
-        res.status(500).json({ error: 'Failed to reset round' });
+        await client.query('ROLLBACK');
+        console.error('❌ Reset round error:', error);
+
+        res.status(500).json({
+            error: 'Failed to reset round',
+            details: error.message
+        });
+    } finally {
+        client.release();
     }
 });
+
 
 /* =========================
    DASHBOARD STATS (MAIN)
