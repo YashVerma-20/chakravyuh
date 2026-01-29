@@ -13,8 +13,8 @@ const JudgeDashboard = () => {
         const fetchData = async () => {
             try {
                 const [statsRes, configRes] = await Promise.all([
-                    api.get('/judge/dashboard/stats'),
-                    api.get('/judge/config')
+                    api.get('/api/judge/dashboard/stats'),
+                    api.get('/api/judge/config')
                 ]);
                 setStats(statsRes.data);
                 setConfig(configRes.data.config);
@@ -33,7 +33,7 @@ const JudgeDashboard = () => {
 
     const handleRoundControl = async (action) => {
         try {
-            await api.post(`/judge/round/${action}`);
+            await api.post(`/api/judge/round/${action}`);
             window.location.reload();
         } catch (err) {
             alert(err.response?.data?.error || 'Action failed');
@@ -50,7 +50,7 @@ const JudgeDashboard = () => {
         if (!confirmed) return;
 
         try {
-            await api.post('/judge/round/reset');
+            await api.post('/api/judge/round/reset');
             alert('✅ Round reset successfully! All data cleared.');
             window.location.reload();
         } catch (err) {
