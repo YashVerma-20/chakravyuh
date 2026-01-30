@@ -18,7 +18,7 @@ const JudgeLogin = () => {
 
     try {
         // ✅ DO NOT add /api here
-        const response = await api.post('/auth/judge/login', {
+        const response = await api.post('/api/auth/judge/login', {
             username,
             password
         });
