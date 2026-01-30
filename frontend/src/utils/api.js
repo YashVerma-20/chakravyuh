@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+const BASE_URL =
+    import.meta.env.VITE_API_URL?.replace(/\/$/, '') ||
+    'https://chakravyuh-5d9d.onrender.com';
+
 const api = axios.create({
-    baseURL: `${import.meta.env.VITE_API_URL || 'https://chakravyuh-5d9d.onrender.com'}/api`,
+    baseURL: `${BASE_URL}/api`,
     withCredentials: true
 });
 
