@@ -1,15 +1,11 @@
 import axios from 'axios';
 
-const BASE_URL =
-    import.meta.env.VITE_API_URL?.replace(/\/$/, '') ||
-    'https://chakravyuh-5d9d.onrender.com';
-
 const api = axios.create({
-    baseURL: `${BASE_URL}/api`,
+    baseURL: import.meta.env.VITE_API_URL || 'https://chakravyuh-5d9d.onrender.com',
     withCredentials: true
 });
 
-// ✅ Attach JWT token to every request
+// Attach JWT token
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('authToken');
@@ -21,7 +17,7 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// ✅ Handle auth errors globally
+// Handle auth errors
 api.interceptors.response.use(
     (response) => response,
     (error) => {
