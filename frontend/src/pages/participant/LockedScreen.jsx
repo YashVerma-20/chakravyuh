@@ -11,7 +11,7 @@ const LockedScreen = () => {
     useEffect(() => {
         // Auto-redirect after 5 seconds
         const timer = setTimeout(() => {
-            navigate('/participant/question');
+            navigate('/api/participant/question');
         }, 5000);
 
         return () => clearTimeout(timer);
