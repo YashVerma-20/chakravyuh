@@ -13,12 +13,13 @@ const JudgeDashboard = () => {
         const fetchData = async () => {
             try {
                 const [statsRes, configRes] = await Promise.all([
-                    api.get('/api/judge/dashboard/stats'),
-                    api.get('/api/judge/config')
+                    // ✅ baseURL already has /api
+                    api.get('/judge/dashboard/stats'),
+                    api.get('/judge/config')
                 ]);
 
                 setStats(statsRes.data);
-                setConfig(configRes.data.config);
+                setConfig(configRes.data?.config || null);
             } catch (err) {
                 console.error('Failed to fetch dashboard data:', err);
             } finally {
@@ -33,7 +34,7 @@ const JudgeDashboard = () => {
 
     const handleRoundControl = async (action) => {
         try {
-            await api.post(`/api/judge/round/${action}`);
+            await api.post(`/judge/round/${action}`);
             window.location.reload();
         } catch (err) {
             alert(err.response?.data?.error || 'Action failed');
@@ -44,7 +45,7 @@ const JudgeDashboard = () => {
         if (!window.confirm('This will DELETE all round data. Continue?')) return;
 
         try {
-            await api.post('/api/judge/round/reset');
+            await api.post('/judge/round/reset');
             alert('Round reset successfully');
             window.location.reload();
         } catch (err) {
@@ -59,6 +60,8 @@ const JudgeDashboard = () => {
             </div>
         );
     }
+
+    const roundState = stats?.roundState?.toUpperCase();
 
     return (
         <div className="min-h-screen bg-chakra-darker">
@@ -75,10 +78,10 @@ const JudgeDashboard = () => {
             <div className="max-w-7xl mx-auto px-8 py-8">
                 <div className="card mb-8">
                     <h2 className="text-xl text-chakra-gold mb-2">Round Control</h2>
-                    <p className="text-white text-2xl">{stats?.roundState}</p>
+                    <p className="text-white text-2xl">{roundState}</p>
 
                     <div className="mt-4 flex gap-4">
-                        {stats?.roundState === 'LOCKED' && (
+                        {roundState === 'LOCKED' && (
                             <button
                                 onClick={() => handleRoundControl('start')}
                                 className="btn btn-gold"
@@ -87,7 +90,7 @@ const JudgeDashboard = () => {
                             </button>
                         )}
 
-                        {stats?.roundState === 'ACTIVE' && (
+                        {roundState === 'ACTIVE' && (
                             <button
                                 onClick={() => handleRoundControl('complete')}
                                 className="btn btn-primary"
@@ -96,8 +99,8 @@ const JudgeDashboard = () => {
                             </button>
                         )}
 
-                        {(stats?.roundState === 'COMPLETED' ||
-                            stats?.roundState === 'LEADERBOARD_PUBLISHED') && (
+                        {(roundState === 'COMPLETED' ||
+                            roundState === 'LEADERBOARD_PUBLISHED') && (
                             <button
                                 onClick={handleResetRound}
                                 className="btn bg-red-600 text-white"
@@ -111,21 +114,21 @@ const JudgeDashboard = () => {
                 <div className="grid grid-cols-3 gap-6 mb-8">
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.totalTeams}
+                            {stats?.totalTeams ?? 0}
                         </div>
                         Total Teams
                     </div>
 
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.completedTeams}
+                            {stats?.completedTeams ?? 0}
                         </div>
                         Completed Teams
                     </div>
 
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.totalSubmissions}
+                            {stats?.totalSubmissions ?? 0}
                         </div>
                         Submissions
                     </div>
