@@ -15,7 +15,7 @@ const WaitingScreen = () => {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const response = await api.get('/participant/status');
+                const response = await api.get('/api/participant/status');
                 setRoundState(response.data.roundState);
 
                 // If waiting for descriptive evaluation, check if we can move to next question
