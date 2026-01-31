@@ -18,7 +18,7 @@ const fetchQuestion = async () => {
         setLoading(true);
         setError('');
 
-        const res = await api.get('/participant/question/current'); // ✅ correct
+        const res = await api.get('/api/participant/question/current'); // ✅ correct
 
         const data = res.data;
 
