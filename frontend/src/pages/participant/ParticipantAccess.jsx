@@ -22,7 +22,7 @@ const ParticipantAccess = () => {
              * axios baseURL already includes `/api`
              * so DO NOT prefix `/api` here
              */
-            const response = await api.post('/auth/participant/access', {
+            const response = await api.post('/api/auth/participant/access', {
                 accessToken: accessToken.trim()
             });
 
