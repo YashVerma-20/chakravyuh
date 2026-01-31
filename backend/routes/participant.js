@@ -15,9 +15,9 @@ router.get('/status', async (req, res) => {
 
         // Get round state (SINGLE SOURCE OF TRUTH)
         const configResult = await db.query(`
-            SELECT round_state
-            FROM round_config
-            ORDER BY id ASC
+            SELECT round_state 
+            FROM round_config 
+            ORDER BY id ASC 
             LIMIT 1
         `);
 
@@ -34,11 +34,11 @@ router.get('/status', async (req, res) => {
 
         if (teamState) {
             const pending = await db.query(
-                `SELECT 1
-                 FROM submissions
-                 WHERE team_id = $1
-                 AND question_position = $2
-                 AND evaluated_at IS NULL
+                `SELECT 1 
+                 FROM submissions 
+                 WHERE team_id = $1 
+                 AND question_position = $2 
+                 AND evaluated_at IS NULL 
                  LIMIT 1`,
                 [teamId, teamState.current_question_position]
             );
@@ -64,21 +64,21 @@ router.get('/status', async (req, res) => {
 });
 
 /* =====================================================
-   GET CURRENT QUESTION
+   GET CURRENT QUESTION (CRASH PROOF VERSION)
    ===================================================== */
 router.get('/question/current', async (req, res) => {
     try {
         const teamId = req.user.userId;
 
-        const configResult = await db.query(
-            'SELECT round_state FROM round_config LIMIT 1'
-        );
+        // 1. Check Round State
+        const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
         const roundState = configResult.rows[0]?.round_state || 'LOCKED';
 
         if (roundState !== 'ACTIVE') {
             return res.json({ status: roundState });
         }
 
+        // 2. Ensure Team State Exists
         let stateResult = await db.query(
             'SELECT * FROM team_state WHERE team_id = $1',
             [teamId]
@@ -86,12 +86,11 @@ router.get('/question/current', async (req, res) => {
 
         if (stateResult.rows.length === 0) {
             await db.query(
-                `INSERT INTO team_state
+                `INSERT INTO team_state 
                  (team_id, current_question_position, started_at, is_completed, wrong_answer_count, total_score)
                  VALUES ($1, 1, CURRENT_TIMESTAMP, false, 0, 0)`,
                 [teamId]
             );
-
             stateResult = await db.query(
                 'SELECT * FROM team_state WHERE team_id = $1',
                 [teamId]
@@ -104,6 +103,7 @@ router.get('/question/current', async (req, res) => {
             return res.json({ status: 'COMPLETED' });
         }
 
+        // 3. Fetch Question (Safely)
         const questionResult = await db.query(
             `SELECT qb.id, qb.question_text, qb.question_type, qb.options, qb.max_points
              FROM team_questions tq
@@ -112,8 +112,13 @@ router.get('/question/current', async (req, res) => {
             [teamId, teamState.current_question_position]
         );
 
+        // 🔥 FIX: Handle case where no question is assigned (prevents crash)
         if (questionResult.rows.length === 0) {
-            return res.json({ status: 'LOCKED' });
+            console.error(`⚠️ No question found for Team ${teamId} at position ${teamState.current_question_position}`);
+            return res.json({ 
+                status: 'WAITING', 
+                message: 'Questions are being assigned. Please contact the judge.' 
+            });
         }
 
         const question = questionResult.rows[0];
@@ -131,8 +136,8 @@ router.get('/question/current', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Get current question error:', error);
-        res.status(500).json({ error: 'Failed to fetch question' });
+        console.error('❌ Get current question crash:', error);
+        res.status(500).json({ error: 'Server error loading question' });
     }
 });
 
@@ -183,9 +188,9 @@ router.post('/question/submit', async (req, res) => {
         }
 
         await db.query(
-            `INSERT INTO submissions
+            `INSERT INTO submissions 
              (team_id, question_id, question_position, answer_text, is_correct, points_awarded, evaluated_at)
-             VALUES ($1, $2, $3, $4, $5, $6,
+             VALUES ($1, $2, $3, $4, $5, $6, 
              ${question.question_type === 'MCQ' ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
             [teamId, question.id, teamState.current_question_position, answer, isCorrect ? 1 : 0, points]
         );
