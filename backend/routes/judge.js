@@ -7,6 +7,42 @@ const { authMiddleware, judgeOnly } = require('../middleware/auth');
 router.use(authMiddleware, judgeOnly);
 
 /* =========================
+   GET DASHBOARD STATS (FIXED)
+   ========================= */
+router.get('/dashboard/stats', async (req, res) => {
+    try {
+        // 1. Get Round State
+        const configResult = await db.query(`
+            SELECT round_state 
+            FROM round_config 
+            ORDER BY id ASC 
+            LIMIT 1
+        `);
+        const roundState = configResult.rows[0]?.round_state || 'LOCKED';
+
+        // 2. Get Total Teams
+        const totalTeamsResult = await db.query('SELECT COUNT(*) FROM teams');
+
+        // 3. Get Completed Teams
+        const completedTeamsResult = await db.query('SELECT COUNT(*) FROM team_state WHERE is_completed = true');
+
+        // 4. Get Total Submissions
+        const submissionsResult = await db.query('SELECT COUNT(*) FROM submissions');
+
+        res.json({
+            roundState: roundState,
+            totalTeams: parseInt(totalTeamsResult.rows[0].count),
+            completedTeams: parseInt(completedTeamsResult.rows[0].count),
+            totalSubmissions: parseInt(submissionsResult.rows[0].count)
+        });
+
+    } catch (error) {
+        console.error('Stats fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+    }
+});
+
+/* =========================
    GET ALL SUBMISSIONS
    ========================= */
 router.get('/submissions', async (req, res) => {
@@ -33,9 +69,8 @@ router.get('/submissions', async (req, res) => {
 router.get('/config', async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT *
-            FROM round_config
-            ORDER BY id ASC
+            SELECT * FROM round_config 
+            ORDER BY id ASC 
             LIMIT 1
         `);
 
@@ -74,17 +109,17 @@ router.post('/round/start', async (req, res) => {
             // Reset team state (FULL RESET)
             await db.query(`
                 INSERT INTO team_state (
-                    team_id,
-                    total_score,
-                    started_at,
-                    is_completed,
-                    wrong_answer_count,
+                    team_id, 
+                    total_score, 
+                    started_at, 
+                    is_completed, 
+                    wrong_answer_count, 
                     current_question_position,
                     question_set_number
                 )
                 VALUES ($1, 0, CURRENT_TIMESTAMP, false, 0, 1, 1)
-                ON CONFLICT (team_id)
-                DO UPDATE SET
+                ON CONFLICT (team_id) 
+                DO UPDATE SET 
                     total_score = 0,
                     started_at = CURRENT_TIMESTAMP,
                     is_completed = false,
@@ -103,9 +138,9 @@ router.post('/round/start', async (req, res) => {
             const randomSet = Math.floor(Math.random() * 7) + 1;
 
             const questionsResult = await db.query(`
-                SELECT id
-                FROM question_bank
-                WHERE question_set_id = $1
+                SELECT id 
+                FROM question_bank 
+                WHERE question_set_id = $1 
                 ORDER BY id
                 LIMIT 7
             `, [randomSet]);
@@ -120,14 +155,14 @@ router.post('/round/start', async (req, res) => {
 
         // Activate round (single source of truth)
         await db.query(`
-            UPDATE round_config
+            UPDATE round_config 
             SET round_state = 'ACTIVE',
                 is_locked = true,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = (
-                SELECT id
-                FROM round_config
-                ORDER BY id ASC
+                SELECT id 
+                FROM round_config 
+                ORDER BY id ASC 
                 LIMIT 1
             )
         `);
@@ -149,13 +184,13 @@ router.post('/round/start', async (req, res) => {
 router.post('/round/complete', async (req, res) => {
     try {
         await db.query(`
-            UPDATE round_config
+            UPDATE round_config 
             SET round_state = 'COMPLETED',
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = (
-                SELECT id
-                FROM round_config
-                ORDER BY id ASC
+                SELECT id 
+                FROM round_config 
+                ORDER BY id ASC 
                 LIMIT 1
             )
         `);
@@ -181,14 +216,14 @@ router.post('/round/reset', async (req, res) => {
         await db.query('DELETE FROM team_questions');
 
         await db.query(`
-            UPDATE round_config
+            UPDATE round_config 
             SET round_state = 'LOCKED',
                 is_locked = false,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = (
-                SELECT id
-                FROM round_config
-                ORDER BY id ASC
+                SELECT id 
+                FROM round_config 
+                ORDER BY id ASC 
                 LIMIT 1
             )
         `);
@@ -205,50 +240,5 @@ router.post('/round/reset', async (req, res) => {
         });
     }
 });
-
-/* =========================
-   DASHBOARD STATS
-   ========================= */
-// =========================
-// PARTICIPANT STATUS (🔥 REQUIRED)
-// =========================
-router.get('/status', async (req, res) => {
-    try {
-        const teamId = req.user.userId;
-
-        const configResult = await db.query(`
-            SELECT round_state
-            FROM round_config
-            ORDER BY id ASC
-            LIMIT 1
-        `);
-
-        const roundState = configResult.rows[0]?.round_state || 'LOCKED';
-
-        const stateResult = await db.query(
-            'SELECT * FROM team_state WHERE team_id = $1',
-            [teamId]
-        );
-
-        const teamState = stateResult.rows[0];
-
-        res.json({
-            // 🔥 FRONTEND EXPECTS THIS
-            status: roundState,
-
-            // Extra info
-            roundState,
-            currentQuestion: teamState?.current_question_position || 1,
-            totalQuestions: 7,
-            isCompleted: teamState?.is_completed || false,
-            wrongAnswerCount: teamState?.wrong_answer_count || 0,
-            canProceed: true
-        });
-    } catch (error) {
-        console.error('Participant status error:', error);
-        res.status(500).json({ error: 'Failed to fetch status' });
-    }
-});
-
 
 module.exports = router;
