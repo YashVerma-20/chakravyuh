@@ -15,7 +15,7 @@ const CompletedScreen = () => {
 
         setRestarting(true);
         try {
-            await api.post('/participant/restart');
+            await api.post('/api/participant/restart');
             navigate('/participant/question');
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to restart quiz');
