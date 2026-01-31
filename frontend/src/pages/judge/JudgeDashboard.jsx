@@ -13,13 +13,13 @@ const JudgeDashboard = () => {
         const fetchData = async () => {
             try {
                 const [statsRes, configRes] = await Promise.all([
-                    // ✅ baseURL already has /api
+                    // ❗ NO /api here
                     api.get('/judge/dashboard/stats'),
                     api.get('/judge/config')
                 ]);
 
                 setStats(statsRes.data);
-                setConfig(configRes.data?.config || null);
+                setConfig(configRes.data.config);
             } catch (err) {
                 console.error('Failed to fetch dashboard data:', err);
             } finally {
@@ -61,8 +61,6 @@ const JudgeDashboard = () => {
         );
     }
 
-    const roundState = stats?.roundState?.toUpperCase();
-
     return (
         <div className="min-h-screen bg-chakra-darker">
             <div className="bg-chakra-dark border-b py-4 px-8 flex justify-between">
@@ -78,10 +76,10 @@ const JudgeDashboard = () => {
             <div className="max-w-7xl mx-auto px-8 py-8">
                 <div className="card mb-8">
                     <h2 className="text-xl text-chakra-gold mb-2">Round Control</h2>
-                    <p className="text-white text-2xl">{roundState}</p>
+                    <p className="text-white text-2xl">{stats?.roundState}</p>
 
                     <div className="mt-4 flex gap-4">
-                        {roundState === 'LOCKED' && (
+                        {stats?.roundState === 'LOCKED' && (
                             <button
                                 onClick={() => handleRoundControl('start')}
                                 className="btn btn-gold"
@@ -90,7 +88,7 @@ const JudgeDashboard = () => {
                             </button>
                         )}
 
-                        {roundState === 'ACTIVE' && (
+                        {stats?.roundState === 'ACTIVE' && (
                             <button
                                 onClick={() => handleRoundControl('complete')}
                                 className="btn btn-primary"
@@ -99,8 +97,8 @@ const JudgeDashboard = () => {
                             </button>
                         )}
 
-                        {(roundState === 'COMPLETED' ||
-                            roundState === 'LEADERBOARD_PUBLISHED') && (
+                        {(stats?.roundState === 'COMPLETED' ||
+                            stats?.roundState === 'LEADERBOARD_PUBLISHED') && (
                             <button
                                 onClick={handleResetRound}
                                 className="btn bg-red-600 text-white"
@@ -114,21 +112,21 @@ const JudgeDashboard = () => {
                 <div className="grid grid-cols-3 gap-6 mb-8">
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.totalTeams ?? 0}
+                            {stats?.totalTeams}
                         </div>
                         Total Teams
                     </div>
 
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.completedTeams ?? 0}
+                            {stats?.completedTeams}
                         </div>
                         Completed Teams
                     </div>
 
                     <div className="card text-center">
                         <div className="text-4xl text-chakra-orange">
-                            {stats?.totalSubmissions ?? 0}
+                            {stats?.totalSubmissions}
                         </div>
                         Submissions
                     </div>
