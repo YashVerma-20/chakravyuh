@@ -12,58 +12,62 @@ const QuestionScreen = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    // 🔴 ONLY CHANGE IS THE API PATH (IMPORTANT)
-const fetchQuestion = async () => {
-    try {
-        setLoading(true);
-        setError('');
+    const fetchQuestion = async () => {
+        try {
+            setLoading(true);
+            setError('');
 
-        const res = await api.get('/participant/question/current'); // ✅ correct
+            // ✅ ADDED /api prefix here
+            const res = await api.get('/api/participant/question/current'); 
 
-        const data = res.data;
+            const data = res.data;
 
-        if (!data) {
-            throw new Error('Empty response');
-        }
+            if (!data) {
+                throw new Error('Empty response');
+            }
 
-        if (data.status === 'LOCKED') {
-            navigate('/participant/waiting');
-            return;
-        }
+            if (data.status === 'LOCKED') {
+                navigate('/participant/waiting');
+                return;
+            }
 
-        if (data.status === 'COMPLETED') {
-            navigate('/participant/completed');
-            return;
-        }
+            if (data.status === 'COMPLETED') {
+                navigate('/participant/completed');
+                return;
+            }
 
-        if (!data.question) {
-            throw new Error('Question not assigned yet');
-        }
+            if (data.status === 'WAITING') {
+                setError(data.message || 'Waiting for questions...');
+                return;
+            }
 
-        // Safe MCQ parsing
-        if (data.question.type === 'MCQ' && data.question.options) {
-            if (typeof data.question.options === 'string') {
-                try {
-                    data.question.options = JSON.parse(data.question.options);
-                } catch {
-                    data.question.options = {};
+            if (!data.question) {
+                throw new Error('Question not assigned yet');
+            }
+
+            // Safe MCQ parsing
+            if (data.question.type === 'MCQ' && data.question.options) {
+                if (typeof data.question.options === 'string') {
+                    try {
+                        data.question.options = JSON.parse(data.question.options);
+                    } catch {
+                        data.question.options = {};
+                    }
                 }
             }
+
+            setQuestionData(data);
+        } catch (err) {
+            console.error('Fetch question error:', err);
+            setError(
+                err.response?.status === 404
+                    ? 'Question not assigned yet. Please wait.'
+                    : 'Failed to load question'
+            );
+        } finally {
+            setLoading(false);
         }
-
-        setQuestionData(data);
-    } catch (err) {
-        console.error('Fetch question error:', err);
-        setError(
-            err.response?.status === 404
-                ? 'Question not assigned yet. Please wait.'
-                : 'Failed to load question'
-        );
-    } finally {
-        setLoading(false);
-    }
-};
-
+    };
 
     useEffect(() => {
         fetchQuestion();
@@ -78,7 +82,8 @@ const fetchQuestion = async () => {
         setError('');
 
         try {
-            const res = await api.post('/participant/question/submit', { answer });
+            // ✅ ADDED /api prefix here
+            const res = await api.post('/api/participant/question/submit', { answer });
 
             const action = res.data?.action;
 
@@ -116,6 +121,17 @@ const fetchQuestion = async () => {
                 </div>
             </div>
         );
+    }
+
+    if (!questionData && !error) {
+         // Handle case where we have no data but also no hard error (e.g. waiting status handled in state)
+         return (
+            <div className="min-h-screen bg-chakra-darker flex items-center justify-center">
+                <div className="card max-w-md text-center">
+                     <p className="text-chakra-gold mb-4">Connecting to server...</p>
+                </div>
+            </div>
+         );
     }
 
     if (!questionData) {
