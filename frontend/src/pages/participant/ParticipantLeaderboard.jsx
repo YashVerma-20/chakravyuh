@@ -12,7 +12,7 @@ const ParticipantLeaderboard = () => {
     useEffect(() => {
         const fetchLeaderboard = async () => {
             try {
-                const response = await api.get('/participant/leaderboard');
+                const response = await api.get('/api/participant/leaderboard');
                 setLeaderboard(response.data.leaderboard);
             } catch (err) {
                 if (err.response?.status === 403) {
