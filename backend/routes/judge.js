@@ -3,26 +3,25 @@ const router = express.Router();
 const db = require('../config/database');
 const { authMiddleware, judgeOnly } = require('../middleware/auth');
 
-// All judge routes require authentication and judge role
-router.use(authMiddleware, judgeOnly);
-
 /* =====================================================
-   🌱 EMERGENCY SEEDER (RUN ONCE TO FIX EMPTY DB)
+   🌱 EMERGENCY SEEDER (PUBLIC ACCESS FOR FIXING)
+   Moved to TOP so it works in browser without token
    ===================================================== */
 router.get('/seed-defaults', async (req, res) => {
     try {
         console.log("🌱 Attempting to seed REAL questions...");
 
-        // 1. Check if questions already exist
+        // 1. Check if questions exist
         const check = await db.query('SELECT COUNT(*) FROM question_bank');
         if (parseInt(check.rows[0].count) > 0) {
-            return res.json({ message: 'Database already has questions! Clearing old ones...' });
-            // Optional: Uncomment these lines if you want to FORCE wipe the DB every time
+            // OPTIONAL: Uncomment the next 2 lines if you want to FORCE RESET the questions
             // await db.query('DELETE FROM team_questions');
             // await db.query('DELETE FROM question_bank');
+            
+            return res.json({ message: 'Database already has questions! No need to seed.' });
         }
 
-        // 2. THE REAL QUESTIONS ARRAY (From your add-questions.js)
+        // 2. THE REAL QUESTIONS ARRAY (42 Questions)
         const questions = [
             // Q1 - Q5
             { text: 'An algorithm performs the following operations on an array of size n: A loop runs n times. Inside the loop, a binary search is performed on a sorted array. What is the overall time complexity?', type: 'MCQ', options: '{"A":"O(n)","B":"O(n log n)","C":"O(log n)","D":"O(n²)"}', answer: 'B', points: 10 },
@@ -80,20 +79,16 @@ router.get('/seed-defaults', async (req, res) => {
             { text: 'Increasing cache size indefinitely will eventually:', type: 'MCQ', options: '{"A":"Always improve performance","B":"Increase average memory access time","C":"Show diminishing performance gains","D":"Eliminate need for RAM"}', answer: 'C', points: 10 },
             { text: 'If interrupts are disabled for too long, the MOST serious issue is:', type: 'MCQ', options: '{"A":"Reduced CPU speed","B":"Increased memory usage","C":"Delayed I/O handling","D":"Faster execution"}', answer: 'C', points: 10 },
             
-            // Q41
+            // Q41 - Q42 (Descriptive)
             { text: 'A program updates a database record and then crashes before commit. Which component ensures the database remains correct?', type: 'MCQ', options: '{"A":"Compiler","B":"Operating System","C":"Transaction Manager","D":"Stack Memory"}', answer: 'C', points: 10 },
-            
-            // DESCRIPTIVE (Q42 - Index 41)
             { text: 'Explain the concept of deadlock in operating systems. Describe at least TWO conditions required for deadlock to occur and explain ONE prevention method in detail.', type: 'DESCRIPTIVE', options: null, answer: null, points: 15 }
         ];
 
-        // 3. LOGIC TO INSERT 7 SETS (Using your script's exact logic)
+        // 3. LOGIC TO INSERT 7 SETS
         console.log('Creating 7 question sets for 7 teams...');
-        
         let totalInserted = 0;
 
         for (let setId = 1; setId <= 7; setId++) {
-            // Logic: Select 6 MCQs per set (evenly distributed)
             const startIdx = ((setId - 1) * 6) % 41; 
             const selectedSet = [];
 
@@ -105,7 +100,6 @@ router.get('/seed-defaults', async (req, res) => {
             // Always add the same descriptive question at the end (Index 41)
             selectedSet.push(questions[41]);
 
-            // Insert into Postgres
             for (const q of selectedSet) {
                 await db.query(`
                     INSERT INTO question_bank 
@@ -123,6 +117,12 @@ router.get('/seed-defaults', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+/* =====================================================
+   🔒 SECURE ROUTES (REQUIRE LOGIN)
+   All routes BELOW this line require a token
+   ===================================================== */
+router.use(authMiddleware, judgeOnly);
 
 /* =========================
    GET DASHBOARD STATS
@@ -191,7 +191,6 @@ router.post('/round/start', async (req, res) => {
         const teamsResult = await db.query('SELECT id FROM teams');
 
         for (const team of teamsResult.rows) {
-            // Reset Team State
             await db.query(`
                 INSERT INTO team_state (team_id, total_score, started_at, is_completed, wrong_answer_count, current_question_position, question_set_number)
                 VALUES ($1, 0, CURRENT_TIMESTAMP, false, 0, 1, 1)
@@ -199,14 +198,11 @@ router.post('/round/start', async (req, res) => {
                 total_score = 0, started_at = CURRENT_TIMESTAMP, is_completed = false, wrong_answer_count = 0, current_question_position = 1
             `, [team.id]);
 
-            // Clear old questions
             await db.query('DELETE FROM team_questions WHERE team_id = $1', [team.id]);
 
-            // Assign New Questions
             const randomSet = Math.floor(Math.random() * 7) + 1;
             let questionsResult = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
             
-            // Fallback: If sets are empty, just grab ANY 7 questions
             if (questionsResult.rows.length === 0) {
                  questionsResult = await db.query('SELECT id FROM question_bank LIMIT 7');
             }
