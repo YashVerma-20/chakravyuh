@@ -6,22 +6,14 @@ const { authMiddleware } = require('../middleware/auth');
 router.use(authMiddleware);
 
 /* =====================================================
-   GET CURRENT QUESTION (BULLETPROOF VERSION)
+   GET CURRENT QUESTION (NORMALIZED DATA FIX)
    ===================================================== */
 router.get('/question/current', async (req, res) => {
     try {
-        // Robust ID extraction
         const teamId = req.user.userId || req.user.id;
+        if (!teamId) return res.status(401).json({ error: 'Session invalid. Please login again.' });
 
-        // 1. SECURITY CHECK: Stop invalid tokens immediately
-        if (!teamId) {
-            console.error("❌ Error: Team ID is missing in token payload.");
-            return res.status(401).json({ error: 'Session invalid. Please login again.' });
-        }
-
-        console.log(`🔍 Fetching question for Team ID: ${teamId}`);
-
-        // 2. CHECK ROUND STATE
+        // 1. Check Round State
         const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
         const roundState = configResult.rows[0]?.round_state || 'LOCKED';
 
@@ -29,11 +21,10 @@ router.get('/question/current', async (req, res) => {
             return res.json({ status: roundState });
         }
 
-        // 3. SELF-HEAL: Ensure Team State Exists
+        // 2. Ensure Team State Exists
         let stateResult = await db.query('SELECT * FROM team_state WHERE team_id = $1', [teamId]);
         
         if (stateResult.rows.length === 0) {
-            console.log(`⚠️ Team State missing for ${teamId}. Creating now...`);
             await db.query(`
                 INSERT INTO team_state (team_id, current_question_position, started_at, is_completed, wrong_answer_count, total_score)
                 VALUES ($1, 1, CURRENT_TIMESTAMP, false, 0, 0)
@@ -42,14 +33,10 @@ router.get('/question/current', async (req, res) => {
         }
 
         const teamState = stateResult.rows[0];
-        
-        if (!teamState) {
-             return res.json({ status: 'WAITING', message: 'Initializing team...' });
-        }
-
+        if (!teamState) return res.json({ status: 'WAITING', message: 'Initializing team...' });
         if (teamState.is_completed) return res.json({ status: 'COMPLETED' });
 
-        // 4. SELF-HEAL: Ensure Questions Exist
+        // 3. Fetch Question
         let questionResult = await db.query(
             `SELECT qb.id, qb.question_text, qb.question_type, qb.options, qb.max_points
              FROM team_questions tq
@@ -58,14 +45,12 @@ router.get('/question/current', async (req, res) => {
             [teamId, teamState.current_question_position]
         );
 
+        // 4. Auto-Assign if missing
         if (questionResult.rows.length === 0) {
             console.log(`⚠️ Questions missing for ${teamId}. Assigning random set...`);
-            
-            // Try to get a specific set
             const randomSet = Math.floor(Math.random() * 7) + 1;
             let questions = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
             
-            // Fallback: Get ANY questions if sets are undefined
             if (questions.rows.length === 0) {
                  questions = await db.query('SELECT id FROM question_bank LIMIT 7');
             }
@@ -79,7 +64,6 @@ router.get('/question/current', async (req, res) => {
                 [teamId, questions.rows[i].id, i + 1]);
             }
 
-            // Retry Fetch
             questionResult = await db.query(
                 `SELECT qb.id, qb.question_text, qb.question_type, qb.options, qb.max_points
                  FROM team_questions tq
@@ -93,11 +77,22 @@ router.get('/question/current', async (req, res) => {
             return res.json({ status: 'WAITING', message: 'Failed to assign questions.' });
         }
 
+        const rawQ = questionResult.rows[0];
+
+        // 🔥 FIX: Normalize Data for Frontend (CamelCase)
+        const formattedQuestion = {
+            id: rawQ.id,
+            text: rawQ.question_text,       // Maps question_text -> text
+            type: rawQ.question_type,       // Maps question_type -> type
+            options: rawQ.options,          
+            maxPoints: rawQ.max_points      // Maps max_points -> maxPoints
+        };
+
         res.json({
             status: 'ACTIVE',
             currentQuestion: teamState.current_question_position,
             totalQuestions: 7,
-            question: questionResult.rows[0]
+            question: formattedQuestion
         });
 
     } catch (error) {
@@ -153,7 +148,6 @@ router.post('/question/submit', async (req, res) => {
     }
 });
 
-// Re-add status route
 router.get('/status', async (req, res) => {
     try {
         const teamId = req.user.userId || req.user.id;
