@@ -79,13 +79,13 @@ router.get('/question/current', async (req, res) => {
 
         const rawQ = questionResult.rows[0];
 
-        // 🔥 FIX: Normalize Data for Frontend (CamelCase)
+        // Normalize Data for Frontend (CamelCase)
         const formattedQuestion = {
             id: rawQ.id,
-            text: rawQ.question_text,       // Maps question_text -> text
-            type: rawQ.question_type,       // Maps question_type -> type
+            text: rawQ.question_text,
+            type: rawQ.question_type,
             options: rawQ.options,          
-            maxPoints: rawQ.max_points      // Maps max_points -> maxPoints
+            maxPoints: rawQ.max_points
         };
 
         res.json({
@@ -102,7 +102,7 @@ router.get('/question/current', async (req, res) => {
 });
 
 /* =====================================================
-   SUBMIT ANSWER
+   SUBMIT ANSWER (NOW WITH AUTO-INCREMENT!)
    ===================================================== */
 router.post('/question/submit', async (req, res) => {
     try {
@@ -135,13 +135,27 @@ router.post('/question/submit', async (req, res) => {
             points = isCorrect ? (config.mcq_correct_points || 10) : 0;
         }
 
+        // 1. Insert Submission
         await db.query(
             `INSERT INTO submissions (team_id, question_id, question_position, answer_text, is_correct, points_awarded, evaluated_at)
              VALUES ($1, $2, $3, $4, $5, $6, ${question.question_type === 'MCQ' ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
             [teamId, question.id, teamState.current_question_position, answer, isCorrect, points]
         );
 
-        res.json({ success: true });
+        // 2. 🔥 UPDATE TEAM STATE (INCREMENT QUESTION)
+        const nextPosition = teamState.current_question_position + 1;
+        const isNowCompleted = nextPosition > 7; // Assuming 7 questions total
+
+        await db.query(
+            `UPDATE team_state 
+             SET current_question_position = $1, 
+                 is_completed = $2, 
+                 total_score = total_score + $3
+             WHERE team_id = $4`,
+            [nextPosition, isNowCompleted, points, teamId]
+        );
+
+        res.json({ success: true, isCorrect, nextPosition, completed: isNowCompleted });
     } catch (error) {
         console.error('Submit error:', error);
         res.status(500).json({ error: 'Failed to submit answer' });
