@@ -3,68 +3,25 @@ const router = express.Router();
 const db = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
-// All participant routes require authentication
 router.use(authMiddleware);
 
 /* =====================================================
-   PARTICIPANT STATUS
-   ===================================================== */
-router.get('/status', async (req, res) => {
-    try {
-        const teamId = req.user.userId;
-        
-        // 🔥 CRASH FIX: Check for invalid token data
-        if (!teamId) {
-            return res.status(401).json({ error: 'Invalid token. Please re-login.' });
-        }
-
-        // Get round state
-        const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
-        const roundState = configResult.rows[0]?.round_state || 'LOCKED';
-
-        // Team state
-        const stateResult = await db.query('SELECT * FROM team_state WHERE team_id = $1', [teamId]);
-        const teamState = stateResult.rows[0];
-
-        let canProceed = true;
-        if (teamState) {
-            const pending = await db.query(
-                `SELECT 1 FROM submissions WHERE team_id = $1 AND question_position = $2 AND evaluated_at IS NULL LIMIT 1`,
-                [teamId, teamState.current_question_position]
-            );
-            canProceed = pending.rows.length === 0;
-        }
-
-        res.json({
-            status: roundState,
-            roundState,
-            currentQuestion: teamState?.current_question_position || 1,
-            totalQuestions: 7,
-            isCompleted: teamState?.is_completed || false,
-            wrongAnswerCount: teamState?.wrong_answer_count || 0,
-            canProceed
-        });
-    } catch (error) {
-        console.error('Status Error:', error);
-        res.status(500).json({ error: 'Failed to fetch status' });
-    }
-});
-
-/* =====================================================
-   GET CURRENT QUESTION (FINAL BULLETPROOF VERSION)
+   GET CURRENT QUESTION (BULLETPROOF VERSION)
    ===================================================== */
 router.get('/question/current', async (req, res) => {
     try {
-        const teamId = req.user.userId;
-        console.log(`🔍 Fetching question for Team ID: ${teamId}`);
+        // Robust ID extraction
+        const teamId = req.user.userId || req.user.id;
 
-        // 🔥 CRASH FIX: Stop immediately if ID is missing
+        // 1. SECURITY CHECK: Stop invalid tokens immediately
         if (!teamId) {
-            console.error("❌ Error: Team ID is undefined in token.");
+            console.error("❌ Error: Team ID is missing in token payload.");
             return res.status(401).json({ error: 'Session invalid. Please login again.' });
         }
 
-        // 1. Check Round State
+        console.log(`🔍 Fetching question for Team ID: ${teamId}`);
+
+        // 2. CHECK ROUND STATE
         const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
         const roundState = configResult.rows[0]?.round_state || 'LOCKED';
 
@@ -72,7 +29,7 @@ router.get('/question/current', async (req, res) => {
             return res.json({ status: roundState });
         }
 
-        // 2. SELF-HEAL: Ensure Team State Exists
+        // 3. SELF-HEAL: Ensure Team State Exists
         let stateResult = await db.query('SELECT * FROM team_state WHERE team_id = $1', [teamId]);
         
         if (stateResult.rows.length === 0) {
@@ -86,14 +43,13 @@ router.get('/question/current', async (req, res) => {
 
         const teamState = stateResult.rows[0];
         
-        // Double check state exists to avoid crash
         if (!teamState) {
              return res.json({ status: 'WAITING', message: 'Initializing team...' });
         }
 
         if (teamState.is_completed) return res.json({ status: 'COMPLETED' });
 
-        // 3. SELF-HEAL: Ensure Questions Exist
+        // 4. SELF-HEAL: Ensure Questions Exist
         let questionResult = await db.query(
             `SELECT qb.id, qb.question_text, qb.question_type, qb.options, qb.max_points
              FROM team_questions tq
@@ -103,26 +59,24 @@ router.get('/question/current', async (req, res) => {
         );
 
         if (questionResult.rows.length === 0) {
-            console.log(`⚠️ Questions missing for ${teamId}. Assigning random set now...`);
+            console.log(`⚠️ Questions missing for ${teamId}. Assigning random set...`);
             
-            // Pick a random set
+            // Try to get a specific set
             const randomSet = Math.floor(Math.random() * 7) + 1;
-            const questions = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
+            let questions = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
             
-            // Fallback if sets are empty
-            let finalQuestions = questions.rows;
-            if (finalQuestions.length === 0) {
-                 const fallback = await db.query('SELECT id FROM question_bank LIMIT 7');
-                 finalQuestions = fallback.rows;
+            // Fallback: Get ANY questions if sets are undefined
+            if (questions.rows.length === 0) {
+                 questions = await db.query('SELECT id FROM question_bank LIMIT 7');
             }
 
-            if (finalQuestions.length === 0) {
+            if (questions.rows.length === 0) {
                 return res.json({ status: 'WAITING', message: 'CRITICAL: Question Bank is empty! Contact Judge.' });
             }
             
-            for (let i = 0; i < finalQuestions.length; i++) {
+            for (let i = 0; i < questions.rows.length; i++) {
                 await db.query('INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)', 
-                [teamId, finalQuestions[i].id, i + 1]);
+                [teamId, questions.rows[i].id, i + 1]);
             }
 
             // Retry Fetch
@@ -136,7 +90,7 @@ router.get('/question/current', async (req, res) => {
         }
 
         if (questionResult.rows.length === 0) {
-            return res.json({ status: 'WAITING', message: 'Failed to assign questions. Please contact support.' });
+            return res.json({ status: 'WAITING', message: 'Failed to assign questions.' });
         }
 
         res.json({
@@ -157,7 +111,7 @@ router.get('/question/current', async (req, res) => {
    ===================================================== */
 router.post('/question/submit', async (req, res) => {
     try {
-        const teamId = req.user.userId;
+        const teamId = req.user.userId || req.user.id;
         if (!teamId) return res.status(401).json({ error: 'Session invalid' });
 
         const { answer } = req.body;
@@ -196,6 +150,42 @@ router.post('/question/submit', async (req, res) => {
     } catch (error) {
         console.error('Submit error:', error);
         res.status(500).json({ error: 'Failed to submit answer' });
+    }
+});
+
+// Re-add status route
+router.get('/status', async (req, res) => {
+    try {
+        const teamId = req.user.userId || req.user.id;
+        if (!teamId) return res.status(401).json({ error: 'Session invalid' });
+
+        const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
+        const roundState = configResult.rows[0]?.round_state || 'LOCKED';
+
+        const stateResult = await db.query('SELECT * FROM team_state WHERE team_id = $1', [teamId]);
+        const teamState = stateResult.rows[0];
+
+        let canProceed = true;
+        if (teamState) {
+            const pending = await db.query(
+                `SELECT 1 FROM submissions WHERE team_id = $1 AND question_position = $2 AND evaluated_at IS NULL LIMIT 1`,
+                [teamId, teamState.current_question_position]
+            );
+            canProceed = pending.rows.length === 0;
+        }
+
+        res.json({
+            status: roundState,
+            roundState,
+            currentQuestion: teamState?.current_question_position || 1,
+            totalQuestions: 7,
+            isCompleted: teamState?.is_completed || false,
+            wrongAnswerCount: teamState?.wrong_answer_count || 0,
+            canProceed
+        });
+    } catch (error) {
+        console.error('Status Error:', error);
+        res.status(500).json({ error: 'Failed to fetch status' });
     }
 });
 
