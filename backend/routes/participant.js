@@ -64,7 +64,7 @@ router.get('/status', async (req, res) => {
 });
 
 /* =====================================================
-   GET CURRENT QUESTION (CRASH PROOF VERSION)
+   GET CURRENT QUESTION (EXTRA SAFE VERSION)
    ===================================================== */
 router.get('/question/current', async (req, res) => {
     try {
@@ -85,12 +85,15 @@ router.get('/question/current', async (req, res) => {
         );
 
         if (stateResult.rows.length === 0) {
+            // Attempt to create state
             await db.query(
                 `INSERT INTO team_state 
                  (team_id, current_question_position, started_at, is_completed, wrong_answer_count, total_score)
-                 VALUES ($1, 1, CURRENT_TIMESTAMP, false, 0, 0)`,
+                 VALUES ($1, 1, CURRENT_TIMESTAMP, false, 0, 0)
+                 ON CONFLICT (team_id) DO NOTHING`, // Added ON CONFLICT safety
                 [teamId]
             );
+            // Refetch
             stateResult = await db.query(
                 'SELECT * FROM team_state WHERE team_id = $1',
                 [teamId]
@@ -99,11 +102,19 @@ router.get('/question/current', async (req, res) => {
 
         const teamState = stateResult.rows[0];
 
+        // 🔥 CRITICAL FIX: If state still doesn't exist, stop here.
+        if (!teamState) {
+            return res.json({ 
+                status: 'WAITING', 
+                message: 'Team setup incomplete. Please ask the Judge to click "Start Round".' 
+            });
+        }
+
         if (teamState.is_completed) {
             return res.json({ status: 'COMPLETED' });
         }
 
-        // 3. Fetch Question (Safely)
+        // 3. Fetch Question
         const questionResult = await db.query(
             `SELECT qb.id, qb.question_text, qb.question_type, qb.options, qb.max_points
              FROM team_questions tq
@@ -112,9 +123,7 @@ router.get('/question/current', async (req, res) => {
             [teamId, teamState.current_question_position]
         );
 
-        // 🔥 FIX: Handle case where no question is assigned (prevents crash)
         if (questionResult.rows.length === 0) {
-            console.error(`⚠️ No question found for Team ${teamId} at position ${teamState.current_question_position}`);
             return res.json({ 
                 status: 'WAITING', 
                 message: 'Questions are being assigned. Please contact the judge.' 
