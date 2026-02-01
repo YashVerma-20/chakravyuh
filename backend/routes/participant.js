@@ -12,6 +12,11 @@ router.use(authMiddleware);
 router.get('/status', async (req, res) => {
     try {
         const teamId = req.user.userId;
+        
+        // 🔥 CRASH FIX: Check for invalid token data
+        if (!teamId) {
+            return res.status(401).json({ error: 'Invalid token. Please re-login.' });
+        }
 
         // Get round state
         const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
@@ -46,12 +51,18 @@ router.get('/status', async (req, res) => {
 });
 
 /* =====================================================
-   GET CURRENT QUESTION (SELF-HEALING VERSION)
+   GET CURRENT QUESTION (FINAL BULLETPROOF VERSION)
    ===================================================== */
 router.get('/question/current', async (req, res) => {
     try {
         const teamId = req.user.userId;
         console.log(`🔍 Fetching question for Team ID: ${teamId}`);
+
+        // 🔥 CRASH FIX: Stop immediately if ID is missing
+        if (!teamId) {
+            console.error("❌ Error: Team ID is undefined in token.");
+            return res.status(401).json({ error: 'Session invalid. Please login again.' });
+        }
 
         // 1. Check Round State
         const configResult = await db.query('SELECT round_state FROM round_config LIMIT 1');
@@ -66,16 +77,20 @@ router.get('/question/current', async (req, res) => {
         
         if (stateResult.rows.length === 0) {
             console.log(`⚠️ Team State missing for ${teamId}. Creating now...`);
-            // Force create state
             await db.query(`
                 INSERT INTO team_state (team_id, current_question_position, started_at, is_completed, wrong_answer_count, total_score)
                 VALUES ($1, 1, CURRENT_TIMESTAMP, false, 0, 0)
             `, [teamId]);
-            
             stateResult = await db.query('SELECT * FROM team_state WHERE team_id = $1', [teamId]);
         }
 
         const teamState = stateResult.rows[0];
+        
+        // Double check state exists to avoid crash
+        if (!teamState) {
+             return res.json({ status: 'WAITING', message: 'Initializing team...' });
+        }
+
         if (teamState.is_completed) return res.json({ status: 'COMPLETED' });
 
         // 3. SELF-HEAL: Ensure Questions Exist
@@ -94,24 +109,20 @@ router.get('/question/current', async (req, res) => {
             const randomSet = Math.floor(Math.random() * 7) + 1;
             const questions = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
             
-            if (questions.rows.length === 0) {
-                // Fallback: If sets aren't defined, just grab ANY 7 questions
-                console.log("⚠️ No questions found in set. Grabbing any 7 questions...");
-                const fallbackQuestions = await db.query('SELECT id FROM question_bank LIMIT 7');
-                
-                if (fallbackQuestions.rows.length === 0) {
-                    return res.json({ status: 'WAITING', message: 'CRITICAL: Question Bank is empty! Contact Judge.' });
-                }
-                
-                for (let i = 0; i < fallbackQuestions.rows.length; i++) {
-                    await db.query('INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)', 
-                    [teamId, fallbackQuestions.rows[i].id, i + 1]);
-                }
-            } else {
-                for (let i = 0; i < questions.rows.length; i++) {
-                    await db.query('INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)', 
-                    [teamId, questions.rows[i].id, i + 1]);
-                }
+            // Fallback if sets are empty
+            let finalQuestions = questions.rows;
+            if (finalQuestions.length === 0) {
+                 const fallback = await db.query('SELECT id FROM question_bank LIMIT 7');
+                 finalQuestions = fallback.rows;
+            }
+
+            if (finalQuestions.length === 0) {
+                return res.json({ status: 'WAITING', message: 'CRITICAL: Question Bank is empty! Contact Judge.' });
+            }
+            
+            for (let i = 0; i < finalQuestions.length; i++) {
+                await db.query('INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)', 
+                [teamId, finalQuestions[i].id, i + 1]);
             }
 
             // Retry Fetch
@@ -147,8 +158,9 @@ router.get('/question/current', async (req, res) => {
 router.post('/question/submit', async (req, res) => {
     try {
         const teamId = req.user.userId;
-        const { answer } = req.body;
+        if (!teamId) return res.status(401).json({ error: 'Session invalid' });
 
+        const { answer } = req.body;
         if (!answer || !answer.trim()) return res.status(400).json({ error: 'Answer is required' });
 
         const config = (await db.query('SELECT * FROM round_config LIMIT 1')).rows[0];
