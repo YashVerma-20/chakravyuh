@@ -11,7 +11,8 @@ const SubmissionsView = () => {
 
     const fetchSubmissions = async () => {
         try {
-            const response = await api.get('/judge/submissions');
+            // 🔥 FIXED: Added '/api' prefix here
+            const response = await api.get('/api/judge/submissions');
             setSubmissions(response.data.submissions);
             setLastUpdated(new Date());
         } catch (err) {
