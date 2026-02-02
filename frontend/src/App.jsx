@@ -21,7 +21,7 @@ import ParticipantLeaderboard from './pages/participant/ParticipantLeaderboard';
 import JudgeLogin from './pages/judge/JudgeLogin';
 import JudgeDashboard from './pages/judge/JudgeDashboard';
 import SubmissionsView from './pages/judge/SubmissionsView';
-import DescriptiveScoringPanel from './pages/judge/DescriptiveScoringPanel';
+import ScoringView from './pages/judge/ScoringView'; // 🔥 FIXED: Imported the new file
 import ConfigPanel from './pages/judge/ConfigPanel';
 import LeaderboardManagement from './pages/judge/LeaderboardManagement';
 
@@ -63,7 +63,10 @@ function App() {
                 <Route path="/judge/login" element={<JudgeLogin />} />
                 <Route path="/judge/dashboard" element={<ProtectedRoute requireJudge><JudgeDashboard /></ProtectedRoute>} />
                 <Route path="/judge/submissions" element={<ProtectedRoute requireJudge><SubmissionsView /></ProtectedRoute>} />
-                <Route path="/judge/scoring" element={<ProtectedRoute requireJudge><DescriptiveScoringPanel /></ProtectedRoute>} />
+                
+                {/* 🔥 FIXED: Updated to use ScoringView */}
+                <Route path="/judge/scoring" element={<ProtectedRoute requireJudge><ScoringView /></ProtectedRoute>} />
+                
                 <Route path="/judge/config" element={<ProtectedRoute requireJudge><ConfigPanel /></ProtectedRoute>} />
                 <Route path="/judge/leaderboard" element={<ProtectedRoute requireJudge><LeaderboardManagement /></ProtectedRoute>} />
             </Routes>
