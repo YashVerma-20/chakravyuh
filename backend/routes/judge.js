@@ -179,6 +179,30 @@ router.get('/config', async (req, res) => {
 });
 
 /* =========================
+   UPDATE SCORING CONFIG
+   ========================= */
+router.post('/config/update', async (req, res) => {
+    try {
+        const { mcq_correct_points, descriptive_max_points, wrong_answer_penalty, three_wrong_penalty } = req.body;
+        
+        await db.query(`
+            UPDATE round_config 
+            SET mcq_correct_points = $1,
+                descriptive_max_points = $2,
+                wrong_answer_penalty = $3,
+                three_wrong_penalty = $4,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = (SELECT id FROM round_config LIMIT 1)
+        `, [mcq_correct_points, descriptive_max_points, wrong_answer_penalty, three_wrong_penalty]);
+
+        res.json({ success: true, message: 'Config updated' });
+    } catch (error) {
+        console.error('Config update error:', error);
+        res.status(500).json({ error: 'Failed to update config' });
+    }
+});
+
+/* =========================
    START ROUND
    ========================= */
 router.post('/round/start', async (req, res) => {
