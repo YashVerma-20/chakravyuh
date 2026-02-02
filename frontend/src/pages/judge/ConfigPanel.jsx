@@ -21,12 +21,14 @@ const ConfigPanel = () => {
                 setConfig(response.data.config);
                 
                 // Map Backend (snake_case) to Frontend (camelCase)
-                setFormData({
-                    mcqPoints: response.data.config.mcq_correct_points,
-                    descriptivePoints: response.data.config.descriptive_max_points,
-                    wrongPenalty: response.data.config.wrong_answer_penalty,
-                    threeWrongPenalty: response.data.config.three_wrong_penalty
-                });
+                if (response.data.config) {
+                    setFormData({
+                        mcqPoints: response.data.config.mcq_correct_points || 10,
+                        descriptivePoints: response.data.config.descriptive_max_points || 15,
+                        wrongPenalty: response.data.config.wrong_answer_penalty || -5,
+                        threeWrongPenalty: response.data.config.three_wrong_penalty || -20
+                    });
+                }
             } catch (err) {
                 console.error('Failed to fetch config:', err);
             } finally {
@@ -38,7 +40,7 @@ const ConfigPanel = () => {
     }, []);
 
     const handleSave = async () => {
-        if (config.is_locked) {
+        if (config?.is_locked) {
             alert('Configuration is locked because the round has started');
             return;
         }
@@ -86,6 +88,7 @@ const ConfigPanel = () => {
             </div>
 
             <div className="max-w-3xl mx-auto px-8 py-8">
+                {/* 🔥 FIXED: Optional Chaining (?.) prevents crash if config is null */}
                 {config?.is_locked && (
                     <div className="card bg-red-900 bg-opacity-20 border-red-500 mb-8">
                         <p className="text-red-400 text-lg">
