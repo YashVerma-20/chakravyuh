@@ -16,8 +16,11 @@ const ConfigPanel = () => {
     useEffect(() => {
         const fetchConfig = async () => {
             try {
-                const response = await api.get('/judge/config');
+                // 🔥 FIXED: Added '/api' prefix
+                const response = await api.get('/api/judge/config');
                 setConfig(response.data.config);
+                
+                // Map Backend (snake_case) to Frontend (camelCase)
                 setFormData({
                     mcqPoints: response.data.config.mcq_correct_points,
                     descriptivePoints: response.data.config.descriptive_max_points,
@@ -42,10 +45,21 @@ const ConfigPanel = () => {
 
         setSaving(true);
         try {
-            await api.put('/judge/config', formData);
+            // 🔥 FIXED: Convert CamelCase back to Snake_Case for Backend
+            const payload = {
+                mcq_correct_points: formData.mcqPoints,
+                descriptive_max_points: formData.descriptivePoints,
+                wrong_answer_penalty: formData.wrongPenalty,
+                three_wrong_penalty: formData.threeWrongPenalty
+            };
+
+            // 🔥 FIXED: Use '/api' prefix and POST method
+            await api.post('/api/judge/config/update', payload);
+            
             alert('Configuration updated successfully!');
             window.location.reload();
         } catch (err) {
+            console.error(err);
             alert(err.response?.data?.error || 'Failed to update configuration');
         } finally {
             setSaving(false);
@@ -72,7 +86,7 @@ const ConfigPanel = () => {
             </div>
 
             <div className="max-w-3xl mx-auto px-8 py-8">
-                {config.is_locked && (
+                {config?.is_locked && (
                     <div className="card bg-red-900 bg-opacity-20 border-red-500 mb-8">
                         <p className="text-red-400 text-lg">
                             ⚠️ <strong>Configuration is LOCKED</strong> because the round has started. No changes can be made.
@@ -93,7 +107,7 @@ const ConfigPanel = () => {
                                 value={formData.mcqPoints}
                                 onChange={(e) => setFormData(prev => ({ ...prev, mcqPoints: parseInt(e.target.value) }))}
                                 className="input"
-                                disabled={config.is_locked}
+                                disabled={config?.is_locked}
                             />
                             <p className="text-gray-500 text-sm mt-1">
                                 Points awarded for each correct MCQ answer
@@ -109,7 +123,7 @@ const ConfigPanel = () => {
                                 value={formData.descriptivePoints}
                                 onChange={(e) => setFormData(prev => ({ ...prev, descriptivePoints: parseInt(e.target.value) }))}
                                 className="input"
-                                disabled={config.is_locked}
+                                disabled={config?.is_locked}
                             />
                             <p className="text-gray-500 text-sm mt-1">
                                 Maximum points for descriptive answers (judges can award partial marks)
@@ -129,7 +143,7 @@ const ConfigPanel = () => {
                                 value={formData.wrongPenalty}
                                 onChange={(e) => setFormData(prev => ({ ...prev, wrongPenalty: parseInt(e.target.value) }))}
                                 className="input"
-                                disabled={config.is_locked}
+                                disabled={config?.is_locked}
                             />
                             <p className="text-gray-500 text-sm mt-1">
                                 Negative points applied for each wrong MCQ answer (e.g., -5)
@@ -145,7 +159,7 @@ const ConfigPanel = () => {
                                 value={formData.threeWrongPenalty}
                                 onChange={(e) => setFormData(prev => ({ ...prev, threeWrongPenalty: parseInt(e.target.value) }))}
                                 className="input"
-                                disabled={config.is_locked}
+                                disabled={config?.is_locked}
                             />
                             <p className="text-gray-500 text-sm mt-1">
                                 Heavy penalty when team accumulates 3 wrong answers (e.g., -20)
@@ -153,7 +167,7 @@ const ConfigPanel = () => {
                         </div>
                     </div>
 
-                    {!config.is_locked && (
+                    {!config?.is_locked && (
                         <button
                             onClick={handleSave}
                             disabled={saving}
