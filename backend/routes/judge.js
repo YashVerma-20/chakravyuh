@@ -5,7 +5,6 @@ const { authMiddleware, judgeOnly } = require('../middleware/auth');
 
 /* =====================================================
    🌱 EMERGENCY SEEDER (PUBLIC ACCESS FOR FIXING)
-   Moved to TOP so it works in browser without token
    ===================================================== */
 router.get('/seed-defaults', async (req, res) => {
     try {
@@ -199,7 +198,7 @@ router.post('/config/update', async (req, res) => {
 });
 
 /* =========================
-   START ROUND
+   START ROUND (CRASH FIX: ON CONFLICT IGNORE/UPDATE)
    ========================= */
 router.post('/round/start', async (req, res) => {
     try {
@@ -228,8 +227,11 @@ router.post('/round/start', async (req, res) => {
             }
 
             for (let i = 0; i < questionsResult.rows.length; i++) {
-                await db.query('INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)', 
-                [team.id, questionsResult.rows[i].id, i + 1]);
+                // 🔥 FIXED: Added ON CONFLICT clause to prevent crashes on race conditions
+                await db.query(`
+                    INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)
+                    ON CONFLICT (team_id, question_position) DO UPDATE SET question_id = EXCLUDED.question_id
+                `, [team.id, questionsResult.rows[i].id, i + 1]);
             }
         }
 
@@ -272,7 +274,7 @@ router.post('/round/reset', async (req, res) => {
 });
 
 /* =========================
-   MANUAL SCORING (DESCRIPTIVE)
+   MANUAL SCORING (NEW ROUTE)
    ========================= */
 router.post('/score/update', async (req, res) => {
     try {
