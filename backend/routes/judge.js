@@ -14,10 +14,6 @@ router.get('/seed-defaults', async (req, res) => {
         // 1. Check if questions exist
         const check = await db.query('SELECT COUNT(*) FROM question_bank');
         if (parseInt(check.rows[0].count) > 0) {
-            // OPTIONAL: Uncomment the next 2 lines if you want to FORCE RESET the questions
-            // await db.query('DELETE FROM team_questions');
-            // await db.query('DELETE FROM question_bank');
-            
             return res.json({ message: 'Database already has questions! No need to seed.' });
         }
 
@@ -272,6 +268,46 @@ router.post('/round/reset', async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         res.status(500).json({ error: 'Failed to reset round' });
+    }
+});
+
+/* =========================
+   MANUAL SCORING (DESCRIPTIVE)
+   ========================= */
+router.post('/score/update', async (req, res) => {
+    try {
+        const { submissionId, points, isCorrect } = req.body;
+
+        if (!submissionId || points === undefined) {
+            return res.status(400).json({ error: 'Missing submission ID or points' });
+        }
+
+        // 1. Get the submission to find the team_id
+        const subResult = await db.query('SELECT team_id FROM submissions WHERE id = $1', [submissionId]);
+        if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' });
+        
+        const teamId = subResult.rows[0].team_id;
+
+        // 2. Update the Submission record
+        await db.query(`
+            UPDATE submissions 
+            SET points_awarded = $1, 
+                is_correct = $2, 
+                evaluated_at = CURRENT_TIMESTAMP 
+            WHERE id = $3
+        `, [points, isCorrect, submissionId]);
+
+        // 3. Update the Team's Total Score
+        await db.query(`
+            UPDATE team_state 
+            SET total_score = total_score + $1 
+            WHERE team_id = $2
+        `, [points, teamId]);
+
+        res.json({ success: true, message: 'Score updated successfully' });
+    } catch (error) {
+        console.error('Scoring error:', error);
+        res.status(500).json({ error: 'Failed to update score' });
     }
 });
 
