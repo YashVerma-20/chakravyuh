@@ -21,7 +21,11 @@ import ParticipantLeaderboard from './pages/participant/ParticipantLeaderboard';
 import JudgeLogin from './pages/judge/JudgeLogin';
 import JudgeDashboard from './pages/judge/JudgeDashboard';
 import SubmissionsView from './pages/judge/SubmissionsView';
-import ScoringView from './pages/judge/ScoringView'; // 🔥 FIXED: Imported the new file
+
+// 🔥 FIXED: Import from the ACTUAL file name "DescriptiveScoringPanel"
+// We alias it as 'ScoringView' so we don't have to change the Route below
+import ScoringView from './pages/judge/DescriptiveScoringPanel'; 
+
 import ConfigPanel from './pages/judge/ConfigPanel';
 import LeaderboardManagement from './pages/judge/LeaderboardManagement';
 
@@ -64,7 +68,7 @@ function App() {
                 <Route path="/judge/dashboard" element={<ProtectedRoute requireJudge><JudgeDashboard /></ProtectedRoute>} />
                 <Route path="/judge/submissions" element={<ProtectedRoute requireJudge><SubmissionsView /></ProtectedRoute>} />
                 
-                {/* 🔥 FIXED: Updated to use ScoringView */}
+                {/* This route now correctly uses the imported DescriptiveScoringPanel */}
                 <Route path="/judge/scoring" element={<ProtectedRoute requireJudge><ScoringView /></ProtectedRoute>} />
                 
                 <Route path="/judge/config" element={<ProtectedRoute requireJudge><ConfigPanel /></ProtectedRoute>} />
