@@ -8,17 +8,20 @@ const DescriptiveScoringPanel = () => {
     const [scoring, setScoring] = useState({});
     const [lastUpdated, setLastUpdated] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [submitting, setSubmitting] = useState(null); // Added submitting state
 
     useEffect(() => {
         fetchSubmissions();
-        // Auto-refresh every 5 seconds for real-time updates
         const interval = setInterval(fetchSubmissions, 5000);
         return () => clearInterval(interval);
     }, []);
 
     const fetchSubmissions = async () => {
         try {
+            // 🔥 FIXED: Correct Route is '/judge/submissions'
             const response = await api.get('/judge/submissions');
+            
+            // Filter: Descriptive AND Not Evaluated yet
             const descriptive = response.data.submissions.filter(
                 s => s.question_type === 'DESCRIPTIVE' && !s.evaluated_at
             );
@@ -38,19 +41,38 @@ const DescriptiveScoringPanel = () => {
     };
 
     const handleScore = async (submissionId, maxPoints) => {
-        const points = scoring[submissionId];
-        if (points === undefined || points < 0 || points > maxPoints) {
+        const points = parseFloat(scoring[submissionId]);
+        
+        if (isNaN(points) || points < 0 || points > maxPoints) {
             alert(`Please enter a valid score between 0 and ${maxPoints}`);
             return;
         }
 
+        setSubmitting(submissionId); // Disable button while saving
+
         try {
-            await api.post('/judge/score', { submissionId, points: parseFloat(points) });
+            // 🔥 FIXED: Correct Route '/judge/score/update' and added 'isCorrect'
+            await api.post('/judge/score/update', { 
+                submissionId, 
+                points,
+                isCorrect: points > 0 // Logic: If points > 0, it counts as correct
+            });
+            
             alert('Score saved successfully!');
-            await fetchSubmissions();
-            setScoring(prev => ({ ...prev, [submissionId]: '' }));
+            
+            // Remove locally to update UI instantly
+            setSubmissions(prev => prev.filter(s => s.id !== submissionId));
+            setScoring(prev => {
+                const newScoring = { ...prev };
+                delete newScoring[submissionId];
+                return newScoring;
+            });
+
         } catch (err) {
+            console.error(err);
             alert(err.response?.data?.error || 'Failed to save score');
+        } finally {
+            setSubmitting(null);
         }
     };
 
@@ -91,36 +113,43 @@ const DescriptiveScoringPanel = () => {
 
             <div className="max-w-5xl mx-auto px-8 py-8">
                 {submissions.length === 0 ? (
-                    <div className="card text-center">
+                    <div className="card text-center py-12">
                         <div className="text-6xl mb-4">✅</div>
-                        <p className="text-2xl text-gray-400">
-                            All descriptive answers have been scored!
+                        <h2 className="text-2xl text-white mb-2">All Caught Up!</h2>
+                        <p className="text-gray-400">
+                            All descriptive answers have been scored.
                         </p>
                     </div>
                 ) : (
                     <div className="space-y-6">
                         {submissions.map((sub) => (
-                            <div key={sub.id} className="card">
-                                <div className="mb-4">
-                                    <h3 className="text-2xl font-bold text-white mb-2">
-                                        {sub.team_name}
-                                    </h3>
-                                    <p className="text-gray-500 text-sm">
-                                        Question {sub.question_position} • Submitted {new Date(sub.submitted_at).toLocaleString()}
-                                    </p>
+                            <div key={sub.id} className="card border border-gray-700">
+                                <div className="flex justify-between items-start mb-4 border-b border-gray-700 pb-4">
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-white mb-1">
+                                            {sub.team_name}
+                                        </h3>
+                                        <p className="text-gray-500 text-sm">
+                                            Question {sub.question_position} • Submitted {new Date(sub.submitted_at).toLocaleTimeString()}
+                                        </p>
+                                    </div>
+                                    <div className="bg-purple-900 text-purple-200 px-3 py-1 rounded text-sm font-bold">
+                                        Max: {sub.max_points}
+                                    </div>
                                 </div>
 
-                                <div className="bg-chakra-dark p-4 rounded-lg mb-4">
-                                    <p className="text-gray-400 text-sm mb-2">Question:</p>
-                                    <p className="text-white text-lg">{sub.question_text}</p>
+                                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                                    <div className="bg-gray-800 p-4 rounded-lg">
+                                        <p className="text-gray-400 text-xs uppercase font-bold mb-2">Question</p>
+                                        <p className="text-white text-lg">{sub.question_text}</p>
+                                    </div>
+                                    <div className="bg-gray-900 p-4 rounded-lg border border-chakra-gold border-opacity-30">
+                                        <p className="text-chakra-gold text-xs uppercase font-bold mb-2">Team's Answer</p>
+                                        <p className="text-white leading-relaxed whitespace-pre-wrap">{sub.answer_text}</p>
+                                    </div>
                                 </div>
 
-                                <div className="bg-chakra-darker p-4 rounded-lg mb-4">
-                                    <p className="text-gray-400 text-sm mb-2">Team's Answer:</p>
-                                    <p className="text-white leading-relaxed">{sub.answer_text}</p>
-                                </div>
-
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-end gap-4 bg-chakra-darker p-4 rounded-lg">
                                     <div className="flex-1">
                                         <label className="block text-gray-400 text-sm mb-2">
                                             Award Points (0 - {sub.max_points})
@@ -129,18 +158,19 @@ const DescriptiveScoringPanel = () => {
                                             type="number"
                                             min="0"
                                             max={sub.max_points}
-                                            step="0.5"
+                                            step="1"
                                             value={scoring[sub.id] || ''}
                                             onChange={(e) => setScoring(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                                            className="input"
-                                            placeholder={`Enter points (max: ${sub.max_points})`}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded p-3 text-white focus:border-chakra-gold focus:outline-none"
+                                            placeholder={`Enter points...`}
                                         />
                                     </div>
                                     <button
                                         onClick={() => handleScore(sub.id, sub.max_points)}
-                                        className="btn btn-gold mt-6"
+                                        disabled={submitting === sub.id}
+                                        className="btn btn-gold h-12 px-8"
                                     >
-                                        Save Score
+                                        {submitting === sub.id ? 'Saving...' : 'Save Score'}
                                     </button>
                                 </div>
                             </div>
