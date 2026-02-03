@@ -22,8 +22,7 @@ import JudgeLogin from './pages/judge/JudgeLogin';
 import JudgeDashboard from './pages/judge/JudgeDashboard';
 import SubmissionsView from './pages/judge/SubmissionsView';
 
-// 🔥 FIXED: Import from the ACTUAL file name "DescriptiveScoringPanel"
-// We alias it as 'ScoringView' so we don't have to change the Route below
+// 🔥 FIXED: This line maps the 'ScoringView' variable to your REAL file
 import ScoringView from './pages/judge/DescriptiveScoringPanel'; 
 
 import ConfigPanel from './pages/judge/ConfigPanel';
@@ -68,7 +67,7 @@ function App() {
                 <Route path="/judge/dashboard" element={<ProtectedRoute requireJudge><JudgeDashboard /></ProtectedRoute>} />
                 <Route path="/judge/submissions" element={<ProtectedRoute requireJudge><SubmissionsView /></ProtectedRoute>} />
                 
-                {/* This route now correctly uses the imported DescriptiveScoringPanel */}
+                {/* This route works because 'ScoringView' is defined in the import above */}
                 <Route path="/judge/scoring" element={<ProtectedRoute requireJudge><ScoringView /></ProtectedRoute>} />
                 
                 <Route path="/judge/config" element={<ProtectedRoute requireJudge><ConfigPanel /></ProtectedRoute>} />
