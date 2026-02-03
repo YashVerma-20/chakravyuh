@@ -102,7 +102,7 @@ router.get('/question/current', async (req, res) => {
 });
 
 /* =====================================================
-   SUBMIT ANSWER (UPDATED SCORING LOGIC)
+   SUBMIT ANSWER (SNAKE & LADDER LOGIC: RESET ON WRONG)
    ===================================================== */
 router.post('/question/submit', async (req, res) => {
     try {
@@ -129,61 +129,80 @@ router.post('/question/submit', async (req, res) => {
 
         if (!question) return res.status(400).json({ error: 'Question not found' });
 
-        // 3. CALCULATE POINTS & STREAK LOGIC
+        // 3. SCORING LOGIC
         let isCorrect = false;
-        let points = 0;
+        let pointsChange = 0;
+        
+        let nextPosition = teamState.current_question_position;
         let newWrongCount = teamState.wrong_answer_count;
+        let newTotalScore = teamState.total_score;
+        let isNowCompleted = false;
 
-        // Config values (Default fallbacks: Correct=+10, Wrong=-5, 3-Wrong=-20)
         const POINTS_CORRECT = config.mcq_correct_points || 10;
-        const PENALTY_WRONG = config.wrong_answer_penalty || -5;
-        const PENALTY_THREE_WRONG = config.three_wrong_penalty || -20;
 
         if (question.question_type === 'MCQ') {
             isCorrect = answer.toUpperCase().trim() === question.correct_answer.toUpperCase().trim();
             
             if (isCorrect) {
-                // Correct Answer: Award points & RESET streak
-                points = POINTS_CORRECT;
-                newWrongCount = 0; 
+                // ✅ CORRECT: Advance Forward
+                pointsChange = POINTS_CORRECT;
+                newTotalScore += pointsChange; // Add points to existing score
+                newWrongCount = 0; // Reset streak
+                nextPosition += 1; // Move to next
+                if (nextPosition > 7) isNowCompleted = true; // Finish if > 7
             } else {
-                // Wrong Answer: Apply penalty & INCREASE streak
-                points = PENALTY_WRONG;
-                newWrongCount++;
+                // ❌ WRONG: Reset to Start (Snake Logic)
+                newWrongCount++; 
 
-                // Check for 3 Consecutive Wrongs
-                if (newWrongCount >= 3) {
-                    points += PENALTY_THREE_WRONG; // Add the heavy penalty (e.g., -5 + -20 = -25)
-                    newWrongCount = 0; // Reset streak after punishment
+                // Progressive Penalty Calculation
+                if (newWrongCount === 1) pointsChange = -5;
+                else if (newWrongCount === 2) pointsChange = -10;
+                else if (newWrongCount >= 3) {
+                    pointsChange = -20;
+                    newWrongCount = 0; // Reset streak after heavy penalty
                 }
+
+                // ⚠️ CRITICAL: Reset Logic
+                // "Previously correct marks shifted to initial marks" -> Reset Score to 0 (plus penalty)
+                // "Redirect to question 1" -> Reset Position to 1
+                newTotalScore = 0 + pointsChange; 
+                nextPosition = 1; 
             }
         } else {
-            // Descriptive: Pending evaluation (0 points for now)
-            points = 0;
+            // Descriptive: Just save, no immediate movement logic usually, 
+            // but for now let's assume it moves forward pending manual review.
+            pointsChange = 0;
+            nextPosition += 1;
+            if (nextPosition > 7) isNowCompleted = true;
         }
 
-        // 4. Save Submission
+        // 4. Save Submission Record (Log History)
         await db.query(
             `INSERT INTO submissions (team_id, question_id, question_position, answer_text, is_correct, points_awarded, evaluated_at)
              VALUES ($1, $2, $3, $4, $5, $6, ${question.question_type === 'MCQ' ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
-            [teamId, question.id, teamState.current_question_position, answer, isCorrect, points]
+            [teamId, question.id, teamState.current_question_position, answer, isCorrect, pointsChange]
         );
 
-        // 5. Update Team Stats
-        const nextPosition = teamState.current_question_position + 1;
-        const isNowCompleted = nextPosition > 7; 
-
+        // 5. Update Team State
         await db.query(
             `UPDATE team_state 
              SET current_question_position = $1, 
                  is_completed = $2, 
-                 total_score = total_score + $3,
+                 total_score = $3,  -- Directly setting the new calculated score
                  wrong_answer_count = $4
              WHERE team_id = $5`,
-            [nextPosition, isNowCompleted, points, newWrongCount, teamId]
+            [nextPosition, isNowCompleted, newTotalScore, newWrongCount, teamId]
         );
 
-        res.json({ success: true, isCorrect, points, nextPosition, completed: isNowCompleted });
+        res.json({ 
+            success: true, 
+            isCorrect, 
+            points: pointsChange, 
+            nextPosition, 
+            completed: isNowCompleted,
+            message: isCorrect ? "Correct! Moving forward." : "Wrong! Returning to start." 
+        });
+
     } catch (error) {
         console.error('Submit error:', error);
         res.status(500).json({ error: 'Failed to submit answer' });
