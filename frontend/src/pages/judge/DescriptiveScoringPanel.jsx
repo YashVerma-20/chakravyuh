@@ -18,8 +18,8 @@ const DescriptiveScoringPanel = () => {
 
     const fetchSubmissions = async () => {
         try {
-            // 🔥 FIXED: Correct Route is '/judge/submissions'
-            const response = await api.get('/judge/submissions');
+            // 🔥 FIXED: Correct Route is '/api/judge/submissions'
+            const response = await api.get('/api/judge/submissions');
             
             // Filter: Descriptive AND Not Evaluated yet
             const descriptive = response.data.submissions.filter(
@@ -51,8 +51,8 @@ const DescriptiveScoringPanel = () => {
         setSubmitting(submissionId); // Disable button while saving
 
         try {
-            // 🔥 FIXED: Correct Route '/judge/score/update' and added 'isCorrect'
-            await api.post('/judge/score/update', { 
+            // 🔥 FIXED: Correct Route '/api/judge/score/update' and added 'isCorrect'
+            await api.post('/api/judge/score/update', { 
                 submissionId, 
                 points,
                 isCorrect: points > 0 // Logic: If points > 0, it counts as correct
