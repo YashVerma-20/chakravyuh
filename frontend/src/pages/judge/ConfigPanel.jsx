@@ -2,173 +2,146 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 
-const ConfigPanel = () => {
-    const [config, setConfig] = useState(null);
+const ScoringView = () => {
+    const [pending, setPending] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    
-    // Default values including your Penalties
-    const [formData, setFormData] = useState({
-        mcqPoints: 10,
-        descriptivePoints: 15,
-        wrongPenalty: -5,
-        threeWrongPenalty: -20
-    });
+    const [scores, setScores] = useState({}); // Stores input values
+    const [submitting, setSubmitting] = useState(null);
 
-    useEffect(() => {
-        const fetchConfig = async () => {
-            try {
-                // Fetch existing config from Backend
-                const response = await api.get('/api/judge/config');
-                setConfig(response.data.config);
-                
-                // Populate form with existing values or defaults
-                if (response.data.config) {
-                    setFormData({
-                        mcqPoints: response.data.config.mcq_correct_points || 10,
-                        descriptivePoints: response.data.config.descriptive_max_points || 15,
-                        wrongPenalty: response.data.config.wrong_answer_penalty || -5,
-                        threeWrongPenalty: response.data.config.three_wrong_penalty || -20
-                    });
-                }
-            } catch (err) {
-                console.error('Failed to fetch config:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchConfig();
-    }, []);
-
-    const handleSave = async () => {
-        if (config?.is_locked) {
-            alert('Configuration is locked because the round has started');
-            return;
-        }
-
-        setSaving(true);
+    // Fetch only UNEVALUATED Descriptive answers
+    const fetchPending = async () => {
         try {
-            // Send data to Backend in the format it expects (snake_case)
-            const payload = {
-                mcq_correct_points: formData.mcqPoints,
-                descriptive_max_points: formData.descriptivePoints,
-                wrong_answer_penalty: formData.wrongPenalty,
-                three_wrong_penalty: formData.threeWrongPenalty
-            };
-
-            await api.post('/api/judge/config/update', payload);
-            
-            alert('Configuration updated successfully!');
-            window.location.reload();
+            const res = await api.get('/api/judge/submissions');
+            const descriptivePending = res.data.submissions.filter(
+                s => s.question_type === 'DESCRIPTIVE' && !s.evaluated_at
+            );
+            setPending(descriptivePending);
         } catch (err) {
-            console.error(err);
-            alert(err.response?.data?.error || 'Failed to update configuration');
+            console.error("Failed to load pending", err);
         } finally {
-            setSaving(false);
+            setLoading(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-chakra-darker flex items-center justify-center">
-                <div className="text-2xl text-chakra-gold animate-pulse">Loading Config...</div>
-            </div>
-        );
-    }
+    useEffect(() => {
+        fetchPending();
+    }, []);
+
+    const handleScoreChange = (id, value) => {
+        setScores({ ...scores, [id]: value });
+    };
+
+    const submitScore = async (submissionId, maxPoints) => {
+        const points = parseInt(scores[submissionId]);
+
+        if (isNaN(points) || points < 0 || points > maxPoints) {
+            alert(`Please enter a valid score between 0 and ${maxPoints}`);
+            return;
+        }
+
+        setSubmitting(submissionId);
+        try {
+            // Send score to backend
+            await api.post('/api/judge/score/update', {
+                submissionId,
+                points,
+                isCorrect: points > 0 // If points > 0, we mark it as "Correct"
+            });
+            
+            // Remove from list locally to update UI instantly
+            setPending(prev => prev.filter(s => s.id !== submissionId));
+            alert('Score saved!');
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save score.');
+        } finally {
+            setSubmitting(null);
+        }
+    };
+
+    if (loading) return (
+        <div className="min-h-screen bg-chakra-darker flex items-center justify-center text-chakra-gold animate-pulse">
+            Loading pending answers...
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-chakra-darker">
+        <div className="min-h-screen bg-chakra-darker text-white">
             <div className="bg-chakra-dark border-b border-chakra-border py-4 px-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <h1 className="text-3xl font-cinzel text-chakra-gold">Scoring Configuration</h1>
-                    <Link to="/judge/dashboard" className="btn btn-secondary">
-                        ← Dashboard
+                <div className="max-w-5xl mx-auto flex justify-between items-center">
+                    <h1 className="text-3xl font-cinzel text-chakra-gold">Manual Scoring</h1>
+                    <Link to="/judge/submissions" className="btn btn-secondary">
+                        ← Back to Submissions
                     </Link>
                 </div>
             </div>
 
-            <div className="max-w-3xl mx-auto px-8 py-8">
-                {config?.is_locked && (
-                    <div className="card bg-red-900 bg-opacity-20 border-red-500 mb-8">
-                        <p className="text-red-400 text-lg">
-                            ⚠️ <strong>Configuration is LOCKED</strong> because the round has started. No changes can be made.
-                        </p>
+            <div className="max-w-5xl mx-auto p-8">
+                {pending.length === 0 ? (
+                    <div className="card text-center py-12">
+                        <div className="text-4xl mb-4">🎉</div>
+                        <h2 className="text-2xl text-chakra-gold mb-2">All Caught Up!</h2>
+                        <p className="text-gray-400">There are no pending descriptive answers to score.</p>
+                        <Link to="/judge/dashboard" className="btn btn-primary mt-6 inline-block">
+                            Return to Dashboard
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="space-y-8">
+                        {pending.map(item => (
+                            <div key={item.id} className="card border border-gray-700">
+                                {/* Header */}
+                                <div className="flex justify-between items-start mb-4 border-b border-gray-700 pb-4">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white">{item.team_name}</h3>
+                                        <p className="text-gray-500 text-sm">Submitted at: {new Date(item.submitted_at).toLocaleTimeString()}</p>
+                                    </div>
+                                    <div className="bg-purple-900 text-purple-200 px-3 py-1 rounded text-sm font-bold">
+                                        Max Points: {item.max_points || 15}
+                                    </div>
+                                </div>
+
+                                {/* Question & Answer */}
+                                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                                    <div className="bg-gray-800 p-4 rounded">
+                                        <p className="text-gray-400 text-xs uppercase font-bold mb-2">Question</p>
+                                        <p className="text-gray-200">{item.question_text}</p>
+                                    </div>
+                                    <div className="bg-gray-900 p-4 rounded border border-chakra-gold border-opacity-30">
+                                        <p className="text-chakra-gold text-xs uppercase font-bold mb-2">Student's Answer</p>
+                                        <p className="text-white whitespace-pre-wrap">{item.answer_text}</p>
+                                    </div>
+                                </div>
+
+                                {/* Scoring Input */}
+                                <div className="flex items-end gap-4 bg-chakra-darker p-4 rounded">
+                                    <div className="flex-1">
+                                        <label className="block text-gray-400 text-sm mb-1">Points Awarded (0 - {item.max_points || 15})</label>
+                                        <input 
+                                            type="number" 
+                                            min="0"
+                                            max={item.max_points || 15}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white focus:border-chakra-gold focus:outline-none"
+                                            placeholder="Enter score..."
+                                            value={scores[item.id] || ''}
+                                            onChange={(e) => handleScoreChange(item.id, e.target.value)}
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => submitScore(item.id, item.max_points || 15)}
+                                        disabled={submitting === item.id || !scores[item.id]}
+                                        className="btn btn-gold h-11 px-8"
+                                    >
+                                        {submitting === item.id ? 'Saving...' : 'Submit Score'}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
-
-                <div className="card">
-                    {/* SECTION 1: REWARDS */}
-                    <h2 className="text-2xl font-cinzel text-white mb-6">Reward Points</h2>
-                    <div className="space-y-6 mb-8">
-                        <div>
-                            <label className="block text-gray-300 mb-2">MCQ Correct Answer Points</label>
-                            <input
-                                type="number"
-                                value={formData.mcqPoints}
-                                onChange={(e) => setFormData(prev => ({ ...prev, mcqPoints: parseInt(e.target.value) }))}
-                                className="input"
-                                disabled={config?.is_locked}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-gray-300 mb-2">Descriptive Maximum Points</label>
-                            <input
-                                type="number"
-                                value={formData.descriptivePoints}
-                                onChange={(e) => setFormData(prev => ({ ...prev, descriptivePoints: parseInt(e.target.value) }))}
-                                className="input"
-                                disabled={config?.is_locked}
-                            />
-                        </div>
-                    </div>
-
-                    {/* SECTION 2: PENALTIES */}
-                    <h2 className="text-2xl font-cinzel text-red-400 mb-6">Penalties</h2>
-                    <div className="space-y-6">
-                        <div>
-                            <label className="block text-gray-300 mb-2">Wrong Answer Penalty (e.g., -5)</label>
-                            <input
-                                type="number"
-                                value={formData.wrongPenalty}
-                                onChange={(e) => setFormData(prev => ({ ...prev, wrongPenalty: parseInt(e.target.value) }))}
-                                className="input border-red-900 focus:border-red-500"
-                                disabled={config?.is_locked}
-                            />
-                            <p className="text-gray-500 text-sm mt-1">
-                                Points deducted for a single wrong answer.
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="block text-gray-300 mb-2">3 Consecutive Wrong Answers Penalty (e.g., -20)</label>
-                            <input
-                                type="number"
-                                value={formData.threeWrongPenalty}
-                                onChange={(e) => setFormData(prev => ({ ...prev, threeWrongPenalty: parseInt(e.target.value) }))}
-                                className="input border-red-900 focus:border-red-500"
-                                disabled={config?.is_locked}
-                            />
-                            <p className="text-gray-500 text-sm mt-1">
-                                Extra points deducted if they get 3 wrong in a row.
-                            </p>
-                        </div>
-                    </div>
-
-                    {!config?.is_locked && (
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="btn btn-gold w-full mt-8 text-lg disabled:opacity-50"
-                        >
-                            {saving ? 'Saving...' : 'Save Configuration'}
-                        </button>
-                    )}
-                </div>
             </div>
         </div>
     );
 };
 
-export default ConfigPanel;
+export default ScoringView;
