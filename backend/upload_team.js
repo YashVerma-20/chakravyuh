@@ -2,7 +2,7 @@ const { Client } = require('pg');
 
 // 🔴 PASTE YOUR RENDER "EXTERNAL DATABASE URL" INSIDE THE QUOTES BELOW 🔴
 // It starts with postgres:// and ends with .render.com
-const connectionString = 'PASTE_YOUR_EXTERNAL_URL_HERE';
+const connectionString = 'postgresql://chakravyuh_user:wHdebdCKF0srnX5HY0CF6RCD5X0H1WM3@dpg-d5ti6a7gi27c73f8637g-a.oregon-postgres.render.com/chakravyuh';
 
 const client = new Client({
   connectionString: connectionString,
