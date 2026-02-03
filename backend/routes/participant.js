@@ -102,7 +102,7 @@ router.get('/question/current', async (req, res) => {
 });
 
 /* =====================================================
-   SUBMIT ANSWER (SNAKE & LADDER LOGIC: RESET ON WRONG)
+   SUBMIT ANSWER (RESET + SHUFFLE QUESTIONS ON WRONG)
    ===================================================== */
 router.post('/question/submit', async (req, res) => {
     try {
@@ -146,12 +146,12 @@ router.post('/question/submit', async (req, res) => {
             if (isCorrect) {
                 // ✅ CORRECT: Advance Forward
                 pointsChange = POINTS_CORRECT;
-                newTotalScore += pointsChange; // Add points to existing score
-                newWrongCount = 0; // Reset streak
-                nextPosition += 1; // Move to next
-                if (nextPosition > 7) isNowCompleted = true; // Finish if > 7
+                newTotalScore += pointsChange; 
+                newWrongCount = 0; 
+                nextPosition += 1; 
+                if (nextPosition > 7) isNowCompleted = true;
             } else {
-                // ❌ WRONG: Reset to Start (Snake Logic)
+                // ❌ WRONG: Apply Penalty, Reset, and SHUFFLE
                 newWrongCount++; 
 
                 // Progressive Penalty Calculation
@@ -159,18 +159,35 @@ router.post('/question/submit', async (req, res) => {
                 else if (newWrongCount === 2) pointsChange = -10;
                 else if (newWrongCount >= 3) {
                     pointsChange = -20;
-                    newWrongCount = 0; // Reset streak after heavy penalty
+                    newWrongCount = 0; 
                 }
 
-                // ⚠️ CRITICAL: Reset Logic
-                // "Previously correct marks shifted to initial marks" -> Reset Score to 0 (plus penalty)
-                // "Redirect to question 1" -> Reset Position to 1
+                // Reset Logic
                 newTotalScore = 0 + pointsChange; 
                 nextPosition = 1; 
+
+                // 🔥 SHUFFLE LOGIC START: Delete old questions
+                await db.query('DELETE FROM team_questions WHERE team_id = $1', [teamId]);
+
+                // Fetch NEW random set
+                const randomSet = Math.floor(Math.random() * 7) + 1;
+                let newQuestions = await db.query('SELECT id FROM question_bank WHERE question_set_id = $1 ORDER BY id LIMIT 7', [randomSet]);
+                
+                // Fallback if set is empty
+                if (newQuestions.rows.length === 0) {
+                     newQuestions = await db.query('SELECT id FROM question_bank LIMIT 7');
+                }
+
+                // Assign new questions
+                for (let i = 0; i < newQuestions.rows.length; i++) {
+                    await db.query(`
+                        INSERT INTO team_questions (team_id, question_id, question_position) VALUES ($1, $2, $3)
+                    `, [teamId, newQuestions.rows[i].id, i + 1]);
+                }
+                // 🔥 SHUFFLE LOGIC END
             }
         } else {
-            // Descriptive: Just save, no immediate movement logic usually, 
-            // but for now let's assume it moves forward pending manual review.
+            // Descriptive: Moves forward pending manual review.
             pointsChange = 0;
             nextPosition += 1;
             if (nextPosition > 7) isNowCompleted = true;
@@ -188,7 +205,7 @@ router.post('/question/submit', async (req, res) => {
             `UPDATE team_state 
              SET current_question_position = $1, 
                  is_completed = $2, 
-                 total_score = $3,  -- Directly setting the new calculated score
+                 total_score = $3,  
                  wrong_answer_count = $4
              WHERE team_id = $5`,
             [nextPosition, isNowCompleted, newTotalScore, newWrongCount, teamId]
@@ -200,7 +217,7 @@ router.post('/question/submit', async (req, res) => {
             points: pointsChange, 
             nextPosition, 
             completed: isNowCompleted,
-            message: isCorrect ? "Correct! Moving forward." : "Wrong! Returning to start." 
+            message: isCorrect ? "Correct! Moving forward." : "Wrong! Questions shuffled & returning to start." 
         });
 
     } catch (error) {
