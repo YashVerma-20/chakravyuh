@@ -5,205 +5,124 @@ import api from '../../utils/api';
 const LeaderboardManagement = () => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [roundState, setRoundState] = useState('');
-    const [ranks, setRanks] = useState({});
-    const [notes, setNotes] = useState({});
-
-    useEffect(() => {
-        fetchLeaderboard();
-    }, []);
+    const [lastUpdated, setLastUpdated] = useState(null);
 
     const fetchLeaderboard = async () => {
         try {
-            const [lbRes, configRes] = await Promise.all([
-                api.get('/judge/leaderboard'),
-                api.get('/judge/config')
-            ]);
-            setLeaderboard(lbRes.data.leaderboard);
-            setRoundState(configRes.data.config.round_state);
-
-            // Initialize ranks and notes
-            const initialRanks = {};
-            const initialNotes = {};
-            lbRes.data.leaderboard.forEach(entry => {
-                initialRanks[entry.team_id] = entry.manual_rank || '';
-                initialNotes[entry.team_id] = entry.notes || '';
-            });
-            setRanks(initialRanks);
-            setNotes(initialNotes);
+            const res = await api.get('/api/judge/leaderboard');
+            setLeaderboard(res.data.leaderboard);
+            setLastUpdated(new Date());
         } catch (err) {
-            console.error('Failed to fetch leaderboard:', err);
+            console.error("Failed to load leaderboard", err);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleAssignRank = async (teamId) => {
-        const rank = ranks[teamId];
-        if (!rank || rank < 1) {
-            alert('Please enter a valid rank');
-            return;
-        }
+    useEffect(() => {
+        fetchLeaderboard();
+        const interval = setInterval(fetchLeaderboard, 5000); // Auto-refresh every 5s
+        return () => clearInterval(interval);
+    }, []);
 
-        try {
-            await api.put('/judge/leaderboard/rank', {
-                teamId,
-                rank: parseInt(rank),
-                notes: notes[teamId] || ''
-            });
-            alert('Rank assigned successfully!');
-            await fetchLeaderboard();
-        } catch (err) {
-            alert(err.response?.data?.error || 'Failed to assign rank');
-        }
-    };
-
-    const handlePublish = async () => {
-        if (!window.confirm('Are you sure you want to publish the leaderboard? This action is FINAL and cannot be undone.')) {
-            return;
-        }
-
-        try {
-            await api.post('/judge/leaderboard/publish');
-            alert('Leaderboard published successfully!');
-            await fetchLeaderboard();
-        } catch (err) {
-            alert(err.response?.data?.error || 'Failed to publish leaderboard');
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-chakra-darker flex items-center justify-center">
-                <div className="text-2xl text-chakra-gold animate-pulse">Loading...</div>
-            </div>
-        );
-    }
-
-    const isPublished = roundState === 'LEADERBOARD_PUBLISHED';
-    const allRanked = leaderboard.every(entry => entry.manual_rank !== null);
+    if (loading) return (
+        <div className="min-h-screen bg-chakra-darker flex items-center justify-center text-chakra-gold animate-pulse">
+            Loading Live Leaderboard...
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-chakra-darker">
+        <div className="min-h-screen bg-chakra-darker text-white font-sans">
             <div className="bg-chakra-dark border-b border-chakra-border py-4 px-8">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <h1 className="text-3xl font-cinzel text-chakra-gold">Leaderboard Management</h1>
-                    <Link to="/judge/dashboard" className="btn btn-secondary">
-                        ← Dashboard
-                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-cinzel text-chakra-gold">Live Leaderboard</h1>
+                        {lastUpdated && (
+                            <p className="text-gray-500 text-sm mt-1">
+                                Auto-updating • Last synced: {lastUpdated.toLocaleTimeString()}
+                            </p>
+                        )}
+                    </div>
+                    <div className="space-x-4">
+                        <button 
+                            onClick={fetchLeaderboard} 
+                            className="px-4 py-2 bg-chakra-blue rounded hover:bg-blue-600 transition"
+                        >
+                            🔄 Refresh Now
+                        </button>
+                        <Link to="/judge/dashboard" className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600 transition">
+                            ← Dashboard
+                        </Link>
+                    </div>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-8 py-8">
-                {/* Status Banner */}
-                {isPublished ? (
-                    <div className="card bg-green-900 bg-opacity-20 border-green-500 mb-8">
-                        <p className="text-green-400 text-lg">
-                            ✅ <strong>Leaderboard is PUBLISHED</strong> and read-only. Rankings are final.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="card bg-chakra-gold bg-opacity-10 border-chakra-gold mb-8">
-                        <p className="text-white mb-4">
-                            <strong>Manual Ranking Required:</strong> Assign ranks to all teams before publishing.
-                        </p>
-                        <p className="text-gray-400 text-sm">
-                            The leaderboard does NOT auto-sort. You must manually assign each team's rank based on scores and other factors.
-                        </p>
-                    </div>
-                )}
-
-                {/* Leaderboard */}
-                <div className="space-y-4 mb-8">
-                    {leaderboard
-                        .sort((a, b) => (a.manual_rank || 999) - (b.manual_rank || 999))
-                        .map((entry) => (
-                            <div key={entry.team_id} className="card">
-                                <div className="grid md:grid-cols-3 gap-6">
-                                    <div>
-                                        <h3 className="text-xl font-bold text-white mb-2">
-                                            {entry.team_name}
-                                        </h3>
-                                        <p className="text-gray-400 text-sm">Team ID: {entry.team_id}</p>
-                                        <p className="text-chakra-orange text-2xl font-bold mt-2">
-                                            {entry.final_score} points
-                                        </p>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-gray-400 text-sm mb-2">Assign Rank</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            value={ranks[entry.team_id] || ''}
-                                            onChange={(e) => setRanks(prev => ({ ...prev, [entry.team_id]: e.target.value }))}
-                                            className="input"
-                                            placeholder="Enter rank (1, 2, 3...)"
-                                            disabled={isPublished}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-gray-400 text-sm mb-2">Notes (Optional)</label>
-                                        <textarea
-                                            value={notes[entry.team_id] || ''}
-                                            onChange={(e) => setNotes(prev => ({ ...prev, [entry.team_id]: e.target.value }))}
-                                            className="input h-20 resize-none"
-                                            placeholder="Judge notes..."
-                                            disabled={isPublished}
-                                        />
-                                    </div>
-                                </div>
-
-                                {!isPublished && (
-                                    <button
-                                        onClick={() => handleAssignRank(entry.team_id)}
-                                        className="btn btn-secondary mt-4"
-                                    >
-                                        Save Rank
-                                    </button>
+            <div className="max-w-7xl mx-auto p-8">
+                <div className="bg-chakra-dark rounded-lg border border-gray-700 overflow-hidden shadow-2xl">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-800 text-chakra-gold uppercase text-sm tracking-wider">
+                                <tr>
+                                    <th className="p-5">Rank</th>
+                                    <th className="p-5">Team Name</th>
+                                    <th className="p-5 text-center">Status</th>
+                                    <th className="p-5 text-center">Wrong Answers</th>
+                                    <th className="p-5 text-right text-lg">Total Score</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-700">
+                                {leaderboard.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="p-8 text-center text-gray-400">
+                                            No teams have started the round yet.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    leaderboard.map((team, index) => (
+                                        <tr 
+                                            key={index} 
+                                            className={`transition duration-200 hover:bg-gray-800 ${
+                                                index === 0 ? 'bg-yellow-900 bg-opacity-20' : ''
+                                            }`}
+                                        >
+                                            <td className="p-5">
+                                                <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                                    index === 0 ? 'bg-chakra-gold text-black' :
+                                                    index === 1 ? 'bg-gray-400 text-black' :
+                                                    index === 2 ? 'bg-orange-700 text-white' :
+                                                    'text-gray-400'
+                                                }`}>
+                                                    {index + 1}
+                                                </span>
+                                            </td>
+                                            <td className="p-5 font-bold text-lg text-white">
+                                                {team.team_name}
+                                                {index === 0 && <span className="ml-2">👑</span>}
+                                            </td>
+                                            <td className="p-5 text-center">
+                                                {team.is_completed ? (
+                                                    <span className="bg-green-900 text-green-200 px-3 py-1 rounded-full text-xs font-bold uppercase">
+                                                        Completed
+                                                    </span>
+                                                ) : (
+                                                    <span className="bg-blue-900 text-blue-200 px-3 py-1 rounded-full text-xs font-bold uppercase">
+                                                        Active (Q{team.current_question_position})
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="p-5 text-center text-red-400 font-mono">
+                                                {team.wrong_answer_count}
+                                            </td>
+                                            <td className="p-5 text-right font-mono text-2xl text-chakra-orange font-bold">
+                                                {team.total_score}
+                                            </td>
+                                        </tr>
+                                    ))
                                 )}
-
-                                {entry.manual_rank && (
-                                    <div className="mt-4 text-green-400 text-sm">
-                                        ✓ Rank assigned: <strong>#{entry.manual_rank}</strong>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-
-                    {leaderboard.length === 0 && (
-                        <div className="card text-center text-gray-400">
-                            No teams have completed the round yet
-                        </div>
-                    )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-
-                {/* Publish Button */}
-                {!isPublished && allRanked && leaderboard.length > 0 && (
-                    <div className="card bg-chakra-gold bg-opacity-10 border-chakra-gold">
-                        <h3 className="text-2xl font-cinzel text-chakra-gold mb-4">
-                            Ready to Publish
-                        </h3>
-                        <p className="text-gray-300 mb-6">
-                            All teams have been ranked. Once published, the leaderboard will be visible to participants and rankings become final.
-                        </p>
-                        <button
-                            onClick={handlePublish}
-                            className="btn btn-gold text-lg w-full"
-                        >
-                            🏆 Publish Leaderboard
-                        </button>
-                    </div>
-                )}
-
-                {!isPublished && !allRanked && leaderboard.length > 0 && (
-                    <div className="card bg-red-900 bg-opacity-20 border-red-500">
-                        <p className="text-red-400">
-                            ⚠️ Not all teams have been ranked. Please assign ranks to all teams before publishing.
-                        </p>
-                    </div>
-                )}
             </div>
         </div>
     );
